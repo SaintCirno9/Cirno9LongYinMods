@@ -1,0 +1,61 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net6.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <AssemblyName>LongYinCustomKungfuSkill</AssemblyName>
+    <RootNamespace>LongYinCustomKungfuSkill</RootNamespace>
+    <OutputPath>..\\</OutputPath>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <DebugType>none</DebugType>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <GenerateDependencyFile>false</GenerateDependencyFile>
+    <PackageTempDir>$(BaseIntermediateOutputPath)package\</PackageTempDir>
+    <PackageZipPath>$(MSBuildProjectDirectory)\LongYinCustomKungfuSkill.zip</PackageZipPath>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="MelonLoader">
+      <HintPath>..\..\MelonLoader\net6\MelonLoader.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="UnityEngine.CoreModule">
+      <HintPath>..\..\MelonLoader\Il2CppAssemblies\UnityEngine.CoreModule.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="UnityEngine.InputLegacyModule">
+      <HintPath>..\..\MelonLoader\Il2CppAssemblies\UnityEngine.InputLegacyModule.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Assembly-CSharp">
+      <HintPath>..\..\MelonLoader\Il2CppAssemblies\Assembly-CSharp.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="0Harmony">
+      <HintPath>..\..\MelonLoader\net6\0Harmony.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Il2Cppmscorlib">
+      <HintPath>..\..\MelonLoader\Il2CppAssemblies\Il2Cppmscorlib.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Il2CppInterop.Runtime">
+      <HintPath>..\..\MelonLoader\net6\Il2CppInterop.Runtime.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+  </ItemGroup>
+
+  <Target Name="PackageBuildOutput" AfterTargets="Build">
+    <ItemGroup>
+      <PackageFiles Include="$(TargetPath)" />
+      <PackageFiles Include="$(MSBuildProjectDirectory)\README.txt" />
+    </ItemGroup>
+    <RemoveDir Directories="$(PackageTempDir)" />
+    <MakeDir Directories="$(PackageTempDir)" />
+    <Copy SourceFiles="@(PackageFiles)" DestinationFolder="$(PackageTempDir)" />
+    <Delete Files="$(PackageZipPath)" Condition="Exists('$(PackageZipPath)')" />
+    <ZipDirectory SourceDirectory="$(PackageTempDir)" DestinationFile="$(PackageZipPath)" Overwrite="true" />
+    <RemoveDir Directories="$(PackageTempDir)" />
+    <Message Text="Packaged build output: $(PackageZipPath)" Importance="high" />
+  </Target>
+</Project>

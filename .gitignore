@@ -1,0 +1,28 @@
+# Build artifacts
+bin/
+obj/
+*.dll
+
+# Visual Studio
+*.user
+*.suo
+*.cache
+*.ide
+.vs/
+
+# NuGet
+*.nupkg
+packages/
+
+# Rider
+.idea/
+*.sln.iml
+
+# dotnet SDK artifacts
+.dotnet/
+
+# 其他临时文件
+*.log
+*.tmp
+*.temp
+
