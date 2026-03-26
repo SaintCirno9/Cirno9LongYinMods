@@ -8,7 +8,7 @@ using HarmonyLib;
 using Il2Cpp;
 using Il2CppSystem.Collections.Generic;
 
-[assembly: MelonInfo(typeof(LongYinCustomHeroTags.Main), "LongYinCustomHeroTags", "1.0.1", "SaintCirno9", null)]
+[assembly: MelonInfo(typeof(LongYinCustomHeroTags.Main), "LongYinCustomHeroTags", "1.0.2", "SaintCirno9", null)]
 [assembly: MelonGame("TppStudio", "LongYinLiZhiZhuan")]
 
 namespace LongYinCustomHeroTags
@@ -56,6 +56,8 @@ namespace LongYinCustomHeroTags
         // Mod 初始化时先确保配置文件存在，保证首启就能正常读取。
         public override void OnInitializeMelon()
         {
+            // .NET 6 默认只内置 UTF-8/ASCII/Latin-1，GBK 等扩展代码页需要显式注册才能使用。
+            Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
             EnsureConfigFileExists();
             LOG.Msg($"LongYinCustomHeroTags 已加载，配置文件：{ConfigFilePath}");
         }
@@ -103,10 +105,18 @@ namespace LongYinCustomHeroTags
             "显示箭头",
         };
 
+        // 防止玩家从游戏中途返回主菜单时重复注册。
+        private static bool _registered;
+
         // 在开始菜单初始化时注册自定义天赋，确保创建人物时也能看到这些天赋。
         [HarmonyPostfix]
         public static void Postfix()
         {
+            if (_registered)
+            {
+                return;
+            }
+
             List<HeroTagDataBase> heroTags = GameDataController.Instance?.heroTagDataBase;
             if (heroTags is not { Count: > 0 })
             {
@@ -120,6 +130,7 @@ namespace LongYinCustomHeroTags
                 RegisterHeroTag(heroTags, customTag);
             }
 
+            _registered = true;
             Main.LOG.Msg($"HeroTag 数据库处理完成，数量：{initialCount} -> {heroTags.Count}");
         }
 
@@ -248,22 +259,81 @@ namespace LongYinCustomHeroTags
         }
 
         // 使用 ReadWrite 共享模式读取整份文本，避免普通只读打开也被其他程序误伤。
+        // 编码自动检测顺序：UTF-8 BOM → UTF-8 严格解码 → GBK（代码页 936）
+        // 兼容低版本 Windows + Excel 默认另存为 GBK 编码的 CSV 文件。
         private static string[] ReadAllLinesShared(string filePath)
         {
-            using FileStream stream = new FileStream(
+            byte[] rawBytes;
+            using (FileStream stream = new FileStream(
                 filePath,
                 FileMode.Open,
                 FileAccess.Read,
-                FileShare.ReadWrite | FileShare.Delete);
-            using StreamReader reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
-
-            System.Collections.Generic.List<string> lines = new System.Collections.Generic.List<string>();
-            while (!reader.EndOfStream)
+                FileShare.ReadWrite | FileShare.Delete))
             {
-                lines.Add(reader.ReadLine() ?? string.Empty);
+                rawBytes = new byte[stream.Length];
+                stream.Read(rawBytes, 0, rawBytes.Length);
             }
 
-            return lines.ToArray();
+            Encoding encoding = DetectEncoding(rawBytes, out int bomLength);
+            string fullText = encoding.GetString(rawBytes, bomLength, rawBytes.Length - bomLength);
+
+            // 按行拆分，兼容 \r\n 与 \n
+            string[] lines = fullText.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None);
+
+            // 去掉末尾因文件以换行结尾而产生的空行
+            int end = lines.Length;
+            while (end > 0 && string.IsNullOrEmpty(lines[end - 1]))
+            {
+                end--;
+            }
+
+            if (end < lines.Length)
+            {
+                System.Array.Resize(ref lines, end);
+            }
+
+            return lines;
+        }
+
+        // 尝试依序识别文件编码：UTF-8 BOM → UTF-8 严格校验 → GBK 兜底。
+        private static Encoding DetectEncoding(byte[] bytes, out int bomLength)
+        {
+            // 检查 UTF-8 BOM（EF BB BF）
+            if (bytes.Length >= 3 && bytes[0] == 0xEF && bytes[1] == 0xBB && bytes[2] == 0xBF)
+            {
+                bomLength = 3;
+                Main.LOG.Msg("配置文件编码检测：UTF-8 with BOM");
+                return new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
+            }
+
+            bomLength = 0;
+
+            // 尝试严格 UTF-8 解码（ExceptionOnInvalidBytes = true）
+            try
+            {
+                Encoding strictUtf8 = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);
+                strictUtf8.GetString(bytes);
+                Main.LOG.Msg("配置文件编码检测：UTF-8 without BOM");
+                return strictUtf8;
+            }
+            catch (DecoderFallbackException)
+            {
+                // UTF-8 解码失败，回退到 GBK
+            }
+
+            // 兜底：GBK（代码页 936），覆盖旧版 Windows / Excel 默认保存的编码
+            try
+            {
+                Encoding gbk = Encoding.GetEncoding(936);
+                Main.LOG.Warning("配置文件编码检测：GBK（非 UTF-8），已自动兼容读取。建议将文件重新保存为 UTF-8 以避免潜在问题。");
+                return gbk;
+            }
+            catch
+            {
+                // 极少数环境下 GBK 代码页不可用，最终回退到系统默认编码
+                Main.LOG.Warning("配置文件编码检测：GBK 代码页不可用，回退到系统默认编码。");
+                return Encoding.Default;
+            }
         }
 
         // 校验 CSV 表头是否齐全，缺少关键列时直接视为致命错误。
@@ -304,10 +374,13 @@ namespace LongYinCustomHeroTags
 
             if (LooksLikeWrongEncoding(headerLine))
             {
-                Main.LOG.Warning("天赋配置文件可能不是 UTF-8 编码，请将 HeroTagData.csv 重新保存为 UTF-8。");
+                // 能走到这里说明编码自动检测也未能正确识别（极罕见的非 UTF-8/GBK 编码）
+                // 引导玩家手动转存为带 BOM 的 UTF-8，这是最保险的格式。
+                Main.LOG.Warning("天赋配置文件表头出现乱码，Mod 已尝试自动检测编码但未能成功识别。" +
+                    "请将 HeroTagData.csv 另存为\"UTF-8 with BOM\"编码（在记事本中选择\"UTF-8\"，在 Excel 中选择\"CSV UTF-8(带BOM)\"）。");
             }
 
-            Main.LOG.Warning("如果你用 Excel 或 WPS 编辑过该文件，请检查 CSV 分隔符、编码和表头是否被改动。");
+            Main.LOG.Warning("如果你用 Excel 或 WPS 编辑过该文件，请检查 CSV 分隔符和表头是否被改动。");
         }
 
         // 粗略识别常见乱码特征，命中时只做提示，不直接阻止加载。
