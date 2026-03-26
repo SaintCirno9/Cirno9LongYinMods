@@ -45,7 +45,35 @@
     </Reference>
   </ItemGroup>
 
+  <UsingTask TaskName="ReadModVersion" TaskFactory="RoslynCodeTaskFactory" AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll">
+    <ParameterGroup>
+      <SourceFile ParameterType="System.String" Required="true" />
+      <ModVersion ParameterType="System.String" Output="true" />
+    </ParameterGroup>
+    <Task>
+      <Using Namespace="System.IO" />
+      <Using Namespace="System.Text.RegularExpressions" />
+      <Code Type="Fragment" Language="cs">
+        <![CDATA[
+          string content = File.ReadAllText(SourceFile);
+          var match = Regex.Match(content, @"MelonInfo\(.*?,\s*""[^""]*""\s*,\s*""([^""]+)""");
+          if (match.Success) {
+              ModVersion = match.Groups[1].Value;
+          } else {
+              ModVersion = "1.0.0";
+          }
+        ]]>
+      </Code>
+    </Task>
+  </UsingTask>
+
   <Target Name="PackageBuildOutput" AfterTargets="Build">
+    <ReadModVersion SourceFile="$(MSBuildProjectDirectory)\Main.cs">
+      <Output TaskParameter="ModVersion" PropertyName="ModVersion" />
+    </ReadModVersion>
+    <PropertyGroup>
+      <PackageZipPath>$(MSBuildProjectDirectory)\LongYinCustomKungfuSkill-v$(ModVersion).zip</PackageZipPath>
+    </PropertyGroup>
     <ItemGroup>
       <PackageFiles Include="$(TargetPath)" />
       <PackageFiles Include="$(MSBuildProjectDirectory)\README.txt" />
@@ -56,6 +84,6 @@
     <Delete Files="$(PackageZipPath)" Condition="Exists('$(PackageZipPath)')" />
     <ZipDirectory SourceDirectory="$(PackageTempDir)" DestinationFile="$(PackageZipPath)" Overwrite="true" />
     <RemoveDir Directories="$(PackageTempDir)" />
-    <Message Text="Packaged build output: $(PackageZipPath)" Importance="high" />
+    <Message Text="打包完成：$(PackageZipPath)" Importance="high" />
   </Target>
 </Project>

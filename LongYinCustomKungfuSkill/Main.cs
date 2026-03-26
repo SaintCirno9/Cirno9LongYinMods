@@ -1,6 +1,8 @@
 using System;
 using System.Globalization;
 using System.IO;
+using System.Linq;
+using System.Reflection;
 using System.Text;
 using System.Threading;
 using MelonLoader;
@@ -9,7 +11,7 @@ using Il2Cpp;
 using Il2CppSystem.Collections.Generic;
 using UnityEngine;
 
-[assembly: MelonInfo(typeof(LongYinCustomKungfuSkill.Main), "LongYinCustomKungfuSkill", "0.1.0", "SaintCirno9", null)]
+[assembly: MelonInfo(typeof(LongYinCustomKungfuSkill.Main), "LongYinCustomKungfuSkill", "1.0.0", "SaintCirno9", null)]
 [assembly: MelonGame("TppStudio", "LongYinLiZhiZhuan")]
 
 namespace LongYinCustomKungfuSkill
@@ -19,9 +21,7 @@ namespace LongYinCustomKungfuSkill
     /// <summary>自定义 CSV 中的一条原始记录，只保留加载和日志所需的最少信息。</summary>
     internal sealed class CustomSkillRow
     {
-        /// <summary>配置期 ID，仅用于校验和日志。</summary>
         public int ConfigID { get; init; }
-
         /// <summary>功法名称。</summary>
         public string Name { get; init; } = string.Empty;
 
@@ -48,35 +48,22 @@ namespace LongYinCustomKungfuSkill
 
     public class Main : MelonMod
     {
-        internal static readonly string ConfigDir  = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "UserData", "LongYinCustomKungfuSkill");
+        internal static readonly string ConfigDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "UserData", "LongYinCustomKungfuSkill");
         internal static readonly string ConfigPath = Path.Combine(ConfigDir, "KungfuSkillData.csv");
 
-        // CSV 模板：使用与原版 KungFuData.csv 一致的表头
+        // CSV 模板：名字列为主键，必须与游戏内功法名称完全一致
+        // 示例：将原版太祖长拳的等级改为5
         private static readonly string DefaultCsv =
             "id,类别,等级,名字,描述,基础威力,经验系数,修炼效果,运功效果,威力系数,修炼需求,攻击范围,伤害范围,使用特效,内力消耗,所属势力,使用目标,攻击架势,防御架势,召唤ID,使用次数,动作,子弹,特效,使用武器,伤害顺序,角色位移,Trail,隐藏\r\n" +
-            "1001,刀法,0,飞雪连天刀,拔刀，劈刀，收刀，只此最简单的动作，却是一切刀法之基,10,1.1,刀法1,,体质2;刀法1;内力0.1,,\"4,0,0\",\"5,1,2\",暴击0.04,5,-1,0,心14,心10,,,skill2_1,,三连剑影小-Target-Grid-Happen,刀,Same,FALSE,0,0\r\n" +
-            "1002,内功,0,九阳神功,呼出浊气，吸入清气，一吐一纳之间，内息造化而成,,0.9,内功1;经脉1,生命上限20;内力上限20;内功4;智力4;经脉4,,,,,,0,-1,0,,,,,,,,,Same,FALSE,0,0\r\n";
+            "9,拳掌,5,太祖长拳Pro,相传本朝太祖所创的基础拳法,10,1.1,拳掌1,,力道2;拳掌1;内力0.3,,\"0,0,4\",\"0,0,1\",伤害0.04,5,-1,0,胸15,胸10,,,skill0_0,,打击5-Target-Grid-Happen,拳,Same,FALSE,0,0\r\n";
 
         public static readonly MelonLogger.Instance LOG = Melon<Main>.Logger;
 
         public override void OnInitializeMelon()
         {
+            Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
             EnsureConfigExists();
             LOG.Msg($"LongYinCustomKungfuSkill 已加载，配置文件：{ConfigPath}");
-            LOG.Msg("调试热键：F7 给主角添加飞雪连天刀，F8 添加九阳神功。");
-        }
-
-        public override void OnUpdate()
-        {
-            if (Input.GetKeyDown(KeyCode.F7))
-            {
-                TryAddSkillToPlayer("飞雪连天刀");
-            }
-
-            if (Input.GetKeyDown(KeyCode.F8))
-            {
-                TryAddSkillToPlayer("九阳神功");
-            }
         }
 
         internal static void EnsureConfigExists()
@@ -96,78 +83,16 @@ namespace LongYinCustomKungfuSkill
             }
         }
 
-        internal static void TryAddSkillToPlayer(string skillName)
-        {
-            try
-            {
-                WorldData worldData = GameController.Instance?.worldData;
-                HeroData player = worldData?.Player();
-                if (player == null)
-                {
-                    LOG.Warning($"调试添加功法失败：当前还拿不到主角对象。skillName={skillName}");
-                    return;
-                }
-
-                KungfuSkillData dataBase = FindSkillDataByName(skillName);
-                if (dataBase == null)
-                {
-                    LOG.Warning($"调试添加功法失败：全局数据库中不存在 skillName={skillName}。");
-                    return;
-                }
-
-                int skillID = dataBase.skillID;
-                KungfuSkillLvData existed = player.FindSkill(skillID);
-                if (existed != null)
-                {
-                    LOG.Msg($"主角已拥有功法 skillID={skillID}，名称={dataBase.name}");
-                    return;
-                }
-
-                var newSkill = new KungfuSkillLvData(skillID)
-                {
-                    belongHeroID = player.heroID,
-                };
-
-                player.GetSkill(newSkill, true, false);
-                KungfuSkillLvData added = player.FindSkill(skillID);
-                if (added == null)
-                {
-                    LOG.Warning($"主角添加功法后仍未找到：skillID={skillID}，名称={dataBase.name}");
-                    return;
-                }
-
-                LOG.Msg($"已通过 HeroData.GetSkill 给主角添加功法：skillID={skillID}，名称={dataBase.name}");
-            }
-            catch (Exception ex)
-            {
-                LOG.Error($"调试添加主角功法异常：skillName={skillName}，异常：{ex}");
-            }
-        }
-
-        internal static KungfuSkillData FindSkillDataByName(string skillName)
-        {
-            GameDataController controller = GameDataController.Instance;
-            if (controller == null || string.IsNullOrWhiteSpace(skillName))
-            {
-                return null;
-            }
-
-            int skillID = controller.GetSkillID(skillName);
-            List<KungfuSkillData> skillList = controller.kungfuSkillDataBase;
-            if (skillList == null || skillID < 0 || skillID >= skillList.Count)
-            {
-                return null;
-            }
-
-            return skillList[skillID];
-        }
     }
 
-    // ─── HarmonyPatch：在开始菜单初始化后注入自定义功法 ──────────────────────────
+    // ─── HarmonyPatch：在开始菜单初始化后按名称覆盖原版功法属性 ─────────────────
 
     [HarmonyPatch(typeof(StartMenuController), nameof(StartMenuController.Start))]
     public class KungfuSkillDatabasePatch
     {
+        // 防重复：MelonLoader 只加载一次 Mod，静态字段不随场景切换重置
+        private static bool _initialized = false;
+
         // 必要列名组：仅支持原版 KungFuData.csv 表头
         private static readonly string[] RequiredColumns =
         {
@@ -180,89 +105,210 @@ namespace LongYinCustomKungfuSkill
         [HarmonyPostfix]
         public static void Postfix()
         {
-            // 获取游戏技能数据库列表
-            List<KungfuSkillData> skillList = GameDataController.Instance?.kungfuSkillDataBase;
-            if (skillList is not { Count: > 0 })
+            if (_initialized)
             {
-                Main.LOG.Warning("KungfuSkill 数据库未就绪，已跳过自定义功法注册。");
+                Main.LOG.Msg("KungfuSkill 已在本次游戏会话中初始化，跳过重复覆盖。");
                 return;
             }
 
-            int before = skillList.Count;
-            foreach (KungfuSkillData skill in BuildCustomSkills())
+            List<KungfuSkillData> skillList = GameDataController.Instance?.kungfuSkillDataBase;
+            if (skillList is not { Count: > 0 })
             {
-                RegisterSkill(skillList, skill);
+                Main.LOG.Warning("KungfuSkill 数据库未就绪，已跳过功法属性覆盖。");
+                return;
             }
 
-            Main.LOG.Msg($"KungfuSkill 数据库处理完成：{before} -> {skillList.Count}");
+            // 先导出原版数据（覆盖前），方便玩家查看并制作修改 CSV
+            ExportVanillaSkills(skillList);
+
+            int count = OverrideExistingSkillsById(skillList);
+            Main.LOG.Msg($"KungfuSkill 覆盖处理完成，共覆盖 {count} 条原版功法属性。");
+            _initialized = true;
         }
 
-        // ── 读取 CSV 并构建 KungfuSkillData 列表 ──
+        // ── 释放原版功法数据模块到 CSV ──
 
-        private static System.Collections.Generic.List<KungfuSkillData> BuildCustomSkills()
+        private static readonly string ExportPath = Path.Combine(Main.ConfigDir, "vanilla_KungfuSkillData.csv");
+
+        private static void ExportVanillaSkills(List<KungfuSkillData> skillList)
+        {
+            try
+            {
+                Directory.CreateDirectory(Main.ConfigDir);
+
+                // 优先尝试从游戏里提取实时的 TextAsset（保证跨版本最新）
+                // 感谢 Asset Studio 解包提供的路径名
+                UnityEngine.TextAsset liveAsset = UnityEngine.Resources.Load<UnityEngine.TextAsset>("gamedata/kungfudata");
+                if (liveAsset != null && !string.IsNullOrEmpty(liveAsset.text))
+                {
+                    File.WriteAllText(ExportPath, liveAsset.text, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
+                    Main.LOG.Msg($"已将【实时提取】的完整版原版功法数据释放到：{ExportPath}");
+                }
+                else
+                {
+                    Main.LOG.Warning("未能提取游戏中实时的配置。");
+                }
+            }
+            catch (Exception ex)
+            {
+                Main.LOG.Warning($"释放原版功法模板失败：{ex.GetType().Name} - {ex.Message}");
+            }
+        }
+
+
+        // ── 按名称覆盖原版功法属性 ──
+
+        private static int OverrideExistingSkillsById(List<KungfuSkillData> skillList)
         {
             LoadedConfigData configData = LoadConfigData();
-            var result = new System.Collections.Generic.List<KungfuSkillData>();
             if (configData.Rows.Length == 0)
             {
-                return result;
+                return 0;
             }
 
-            if (TryBuildCustomSkillsWithNativeLoader(configData, result))
-            {
-                return result;
-            }
-
-            Main.LOG.Error("原生 LoadSkillData 加载失败，已跳过本次自定义功法注册。");
-            return result;
-        }
-
-        private static bool TryBuildCustomSkillsWithNativeLoader(LoadedConfigData configData, System.Collections.Generic.List<KungfuSkillData> result)
-        {
             GameDataController controller = GameDataController.Instance;
             if (controller == null)
             {
-                return false;
+                return 0;
             }
 
             try
             {
                 LTCSVLoader loader = BuildNativeLoader(configData.LoaderCsv);
-
                 int rowCount = loader.GetRow();
+
                 if (rowCount <= 1)
                 {
-                    Main.LOG.Warning("原生加载器读取自定义功法 CSV 后没有可用数据行。");
-                    return false;
+                    Main.LOG.Warning("原生加载器读取 CSV 后没有可用数据行。");
+                    return 0;
                 }
 
                 if (rowCount != configData.Rows.Length + 1)
                 {
-                    Main.LOG.Warning($"原生加载器行数与定义数量不一致：rowCount={rowCount}，rows={configData.Rows.Length}。");
-                    return false;
+                    Main.LOG.Warning($"原生加载器行数与定义不一致：rowCount={rowCount}，rows={configData.Rows.Length}。");
+                    return 0;
                 }
 
+                int successCount = 0;
                 for (int rowIndex = 1; rowIndex < rowCount; rowIndex++)
                 {
                     CustomSkillRow row = configData.Rows[rowIndex - 1];
-                    KungfuSkillData data = controller.LoadSkillData(loader, rowIndex, row.IsSummonSkill);
-                    if (data == null)
+
+                    // 按 ID 查找数据库中的原版条目
+                    KungfuSkillData target = FindInSkillListById(skillList, row.ConfigID);
+                    if (target == null)
                     {
-                        Main.LOG.Warning($"原生 LoadSkillData 返回 null：rowIndex={rowIndex}，ID={row.ConfigID}，名称={row.Name}");
-                        return false;
+                        Main.LOG.Warning($"覆盖跳过：数据库中不存在 ID={row.ConfigID} 的功法，请检查 CSV 是否准确映射。");
+                        continue;
                     }
 
-                    result.Add(data);
+                    // 用原生加载器加载出新属性对象
+                    KungfuSkillData newData = controller.LoadSkillData(loader, rowIndex, row.IsSummonSkill);
+                    if (newData == null)
+                    {
+                        Main.LOG.Warning($"覆盖跳过：LoadSkillData 返回 null，名称='{row.Name}'。");
+                        continue;
+                    }
+
+                    // 保留原始 skillID，反射覆盖其余所有公共属性
+                    int originalSkillID = target.skillID;
+                    CopyPublicProperties(newData, target);
+                    target.skillID = originalSkillID;
+
+                    successCount++;
+                    Main.LOG.Msg($"已覆盖原版功法：skillID={target.skillID}，名称={target.name}");
+                    CompareAndLogCsvChanges(target.skillID.ToString());
                 }
 
-                Main.LOG.Msg($"已通过原生 LoadSkillData 加载 {result.Count} 条自定义功法。");
-                return true;
+                return successCount;
             }
             catch (Exception ex)
             {
-                Main.LOG.Warning($"原生 LoadSkillData 加载异常：{ex.GetType().Name} - {ex.Message}");
-                return false;
+                Main.LOG.Warning($"覆盖功法属性时发生异常：{ex.GetType().Name} - {ex.Message}");
+                return 0;
             }
+        }
+
+        /// <summary>通过反射将 src 的所有可写公共实例属性复制到 dst（Il2Cpp 类型成员是属性而非字段）。</summary>
+        private static void CopyPublicProperties(KungfuSkillData src, KungfuSkillData dst)
+        {
+            System.Type type = typeof(KungfuSkillData);
+            foreach (PropertyInfo prop in type.GetProperties(BindingFlags.Public | BindingFlags.Instance))
+            {
+                if (!prop.CanRead || !prop.CanWrite || prop.Name == "skillID")
+                {
+                    continue;
+                }
+
+                try
+                {
+                    object value = prop.GetValue(src);
+                    prop.SetValue(dst, value);
+                }
+                catch
+                {
+                    // 忽略个别不可写或类型不兼容的属性
+                }
+            }
+        }
+
+        private static void CompareAndLogCsvChanges(string skillIdStr)
+        {
+            try
+            {
+                if (!File.Exists(Main.ConfigPath) || !File.Exists(ExportPath)) return;
+
+                string[] customLines = ReadAllLinesShared(Main.ConfigPath);
+                string[] vanillaLines = ReadAllLinesShared(ExportPath);
+                if (customLines.Length < 1 || vanillaLines.Length < 1) return;
+
+                var headers = SplitCsvLine(vanillaLines[0]);
+                int idCol = Math.Max(0, Array.IndexOf(headers, "id"));
+                var customRow = customLines.Skip(1).Select(SplitCsvLine).FirstOrDefault(r => r.Length > idCol && r[idCol] == skillIdStr);
+                var vanillaRow = vanillaLines.Skip(1).Select(SplitCsvLine).FirstOrDefault(r => r.Length > idCol && r[idCol] == skillIdStr);
+
+                if (customRow == null || vanillaRow == null) return;
+
+                List<string> changes = new List<string>();
+                int cols = Math.Min(headers.Length, Math.Min(customRow.Length, vanillaRow.Length));
+                for (int i = 0; i < cols; i++)
+                {
+                    if (headers[i] == "id") continue; // 忽略 ID 报错
+                    if (customRow[i] != vanillaRow[i])
+                    {
+                        changes.Add($"{headers[i]}: {vanillaRow[i]} -> {customRow[i]}");
+                    }
+                }
+
+                if (changes.Count > 0)
+                {
+                    Main.LOG.Msg("  -> CSV修改项：");
+                    for (int j = 0; j < changes.Count; j++)
+                    {
+                        Main.LOG.Msg($"        {changes[j]}");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Main.LOG.Warning($"比较 CSV 变动时出现异常：{ex.Message}");
+            }
+        }
+
+
+
+        private static KungfuSkillData FindInSkillListById(List<KungfuSkillData> skillList, int id)
+        {
+            for (int i = 0; i < skillList.Count; i++)
+            {
+                KungfuSkillData skill = skillList[i];
+                if (skill != null && skill.skillID == id)
+                {
+                    return skill;
+                }
+            }
+
+            return null;
         }
 
         private static LTCSVLoader BuildNativeLoader(string csv)
@@ -271,6 +317,7 @@ namespace LongYinCustomKungfuSkill
             loader.ReadMultiLine(csv);
             return loader;
         }
+
 
         // ── 从 CSV 解析最少元数据，并把原始文本直接交给 LTCSVLoader ──
 
@@ -286,7 +333,7 @@ namespace LongYinCustomKungfuSkill
 
             try
             {
-                string[] lines = ReadLinesWithRetry(Main.ConfigPath);
+                string[] lines = ReadAllLinesShared(Main.ConfigPath);
                 if (lines.Length <= 1)
                 {
                     Main.LOG.Warning("配置文件为空，未加载任何功法。");
@@ -307,6 +354,7 @@ namespace LongYinCustomKungfuSkill
                 int summonIdCol = FindColumnIndex(headers, "召唤ID");
 
                 var rows = new System.Collections.Generic.List<CustomSkillRow>();
+                // 以功法 ID 为主键去重
                 var seenIDs = new System.Collections.Generic.HashSet<int>();
                 var loaderLines = new System.Collections.Generic.List<string> { lines[0] };
 
@@ -328,7 +376,7 @@ namespace LongYinCustomKungfuSkill
 
                     if (!seenIDs.Add(parsedRow.ConfigID))
                     {
-                        Main.LOG.Warning($"第 {row + 1} 行：SkillID={parsedRow.ConfigID} 重复，已跳过。");
+                        Main.LOG.Warning($"第 {row + 1} 行：功法 ID={parsedRow.ConfigID} 重复，已跳过。");
                         continue;
                     }
 
@@ -336,7 +384,7 @@ namespace LongYinCustomKungfuSkill
                     loaderLines.Add(line);
                 }
 
-                Main.LOG.Msg($"从 CSV 加载了 {rows.Count} 条自定义功法定义。");
+                Main.LOG.Msg($"从 CSV 加载了 {rows.Count} 条覆盖配置。");
                 return new LoadedConfigData(rows.ToArray(), string.Join("\r\n", loaderLines) + "\r\n");
             }
             catch (Exception ex)
@@ -346,104 +394,6 @@ namespace LongYinCustomKungfuSkill
             }
         }
 
-        // ── 将技能注册进数据库；已存在同名技能则跳过，并分配运行时 skillID ──
-
-        private static void RegisterSkill(List<KungfuSkillData> skillList, KungfuSkillData skill)
-        {
-            if (skill == null)
-            {
-                return;
-            }
-
-            string skillName = skill.name;
-            for (int i = 0; i < skillList.Count; i++)
-            {
-                if (skillList[i] != null && string.Equals(skillList[i].name, skillName, StringComparison.Ordinal))
-                {
-                    Main.LOG.Msg($"KungfuSkill 名称={skillName} 已存在，跳过注册。");
-                    return;
-                }
-            }
-
-            int runtimeSkillID = skillList.Count;
-            skill.skillID = runtimeSkillID;
-            skillList.Add(skill);
-            RegisterSkillInGroupedDatabase(skill);
-            RegisterSkillInSummonDatabase(skill);
-            Main.LOG.Msg($"已注册自定义功法：runtimeID={skill.skillID}，名称={skill.name}");
-        }
-
-        private static void RegisterSkillInGroupedDatabase(KungfuSkillData skill)
-        {
-            List<List<List<KungfuSkillData>>> grouped = GameDataController.Instance?.kungfuSkillDataList;
-            if (grouped == null || grouped.Count == 0)
-            {
-                return;
-            }
-
-            int outerCount = grouped.Count;
-            int innerCount = grouped[0]?.Count ?? 0;
-            if (innerCount == 0)
-            {
-                return;
-            }
-
-            bool outerLooksLikeType = outerCount >= 9 && innerCount < 9;
-            int outerIndex = outerLooksLikeType ? skill.type : skill.rareLv;
-            int innerIndex = outerLooksLikeType ? skill.rareLv : skill.type;
-
-            if (outerIndex < 0 || outerIndex >= grouped.Count)
-            {
-                return;
-            }
-
-            List<List<KungfuSkillData>> innerGroups = grouped[outerIndex];
-            if (innerGroups == null || innerIndex < 0 || innerIndex >= innerGroups.Count)
-            {
-                return;
-            }
-
-            List<KungfuSkillData> bucket = innerGroups[innerIndex];
-            if (bucket == null)
-            {
-                bucket = new List<KungfuSkillData>();
-                innerGroups[innerIndex] = bucket;
-            }
-
-            for (int i = 0; i < bucket.Count; i++)
-            {
-                if (bucket[i] != null && string.Equals(bucket[i].name, skill.name, StringComparison.Ordinal))
-                {
-                    return;
-                }
-            }
-
-            bucket.Add(skill);
-        }
-
-        private static void RegisterSkillInSummonDatabase(KungfuSkillData skill)
-        {
-            if (!skill.summonSkill)
-            {
-                return;
-            }
-
-            List<KungfuSkillData> summonList = GameDataController.Instance?.summonSkillDataBase;
-            if (summonList == null)
-            {
-                return;
-            }
-
-            for (int i = 0; i < summonList.Count; i++)
-            {
-                if (summonList[i] != null && string.Equals(summonList[i].name, skill.name, StringComparison.Ordinal))
-                {
-                    return;
-                }
-            }
-
-            summonList.Add(skill);
-        }
 
         // ─── CSV 解析辅助 ────────────────────────────────────────────────────────
 
@@ -466,16 +416,6 @@ namespace LongYinCustomKungfuSkill
             try
             {
                 int skillID = ParseInt(GetCell(cells, idCol), -1);
-                if (skillID <= 0)
-                {
-                    Main.LOG.Warning($"第 {rowNum} 行：ID 无效（值={skillID}），已跳过。");
-                    return null;
-                }
-
-                if (skillID >= 10000)
-                {
-                    Main.LOG.Warning($"第 {rowNum} 行：ID={skillID} 大于等于 10000。实测这类 ID 可能被部分逻辑误判到召唤功法数据，建议改用小于 10000 的空闲 ID。");
-                }
 
                 string name = GetCell(cells, nameCol);
                 if (string.IsNullOrWhiteSpace(name))
@@ -519,17 +459,36 @@ namespace LongYinCustomKungfuSkill
             return allPresent;
         }
 
-        // 带重试的文件读取，规避编辑器占用
-        private static string[] ReadLinesWithRetry(string path, int maxAttempts = 5)
+        // 带重试的文件读取，支持 UTF-8 与 GBK 编码回退，规避编辑器占用
+        private static string[] ReadAllLinesShared(string path, int maxAttempts = 5)
         {
             for (int attempt = 1; attempt <= maxAttempts; attempt++)
             {
                 try
                 {
-                    using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
-                    using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
-                    string content = reader.ReadToEnd();
-                    return content.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None);
+                    byte[] bytes;
+                    using (var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+                    {
+                        using (var ms = new MemoryStream())
+                        {
+                            stream.CopyTo(ms);
+                            bytes = ms.ToArray();
+                        }
+                    }
+
+                    try
+                    {
+                        // 尝试以严格模式读取 UTF-8，如果不符合标准则抛出异常以便回退
+                        Encoding strictUtf8 = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);
+                        string textUtf8 = strictUtf8.GetString(bytes);
+                        return textUtf8.Replace("\uFEFF", "").Split(new[] { "\r\n", "\n" }, StringSplitOptions.None);
+                    }
+                    catch (DecoderFallbackException)
+                    {
+                        Main.LOG.Warning($"[{Path.GetFileName(path)}] 不符合标准 UTF-8 编码，可能是由于系统自带 Excel 直接保存导致，已启动 GBK 容错解析...");
+                        string textGbk = Encoding.GetEncoding("gbk").GetString(bytes);
+                        return textGbk.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None);
+                    }
                 }
                 catch (IOException) when (attempt < maxAttempts)
                 {
@@ -537,8 +496,12 @@ namespace LongYinCustomKungfuSkill
                 }
             }
 
-            // 最后一次不捕获，让上层收到异常
-            return File.ReadAllLines(path, Encoding.UTF8);
+            // 最后一次如果不成功让其自然抛出异常，依然附带 ReadWrite 权限以尽量提供最高容忍度
+            using (var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+            using (var reader = new StreamReader(stream, Encoding.UTF8))
+            {
+                return reader.ReadToEnd().Split(new[] { "\r\n", "\n" }, StringSplitOptions.None);
+            }
         }
 
         /// <summary>支持引号转义的 RFC 4180 CSV 行拆分。</summary>
