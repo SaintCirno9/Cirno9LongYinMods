@@ -11,7 +11,7 @@ using Il2CppInterop.Runtime;
 using Il2CppSystem.Collections.Generic;
 using UnityEngine;
 
-[assembly: MelonInfo(typeof(LongYinCustomKungfuSkill.Main), "LongYinCustomKungfuSkill", "2.0.0", "SaintCirno9", null)]
+[assembly: MelonInfo(typeof(LongYinCustomKungfuSkill.Main), "LongYinCustomKungfuSkill", "2.0.1", "SaintCirno9", null)]
 [assembly: MelonGame("TppStudio", "LongYinLiZhiZhuan")]
 
 namespace LongYinCustomKungfuSkill
@@ -45,7 +45,9 @@ namespace LongYinCustomKungfuSkill
         internal static int VanillaKungFuTotalCount { get; set; } = 0;
 
         private const string TargetResourcePath = "GameData/KungFuData";
+        private const string SpeHeroResourcePath = "GameData/SpeHeroData";
         private static readonly System.Collections.Generic.HashSet<int> InjectedCustomSkillIds = new();
+        private static readonly System.Collections.Generic.Dictionary<string, string> RenamedVanillaSkillNames = new(StringComparer.Ordinal);
 
         /// <summary>自定义技能 ID 到重定向图标 ID 的映射。</summary>
         internal static readonly System.Collections.Generic.Dictionary<string, string> CustomSkillIdToIconId = new(StringComparer.Ordinal);
@@ -102,6 +104,12 @@ namespace LongYinCustomKungfuSkill
         {
             return !string.IsNullOrWhiteSpace(path) &&
                    string.Equals(path.Trim(), TargetResourcePath, StringComparison.OrdinalIgnoreCase);
+        }
+
+        internal static bool ShouldTraceSpeHeroResourcePath(string path)
+        {
+            return !string.IsNullOrWhiteSpace(path) &&
+                   string.Equals(path.Trim(), SpeHeroResourcePath, StringComparison.OrdinalIgnoreCase);
         }
 
         internal static void ResetInjectedCustomSkillIds()
@@ -294,6 +302,109 @@ namespace LongYinCustomKungfuSkill
             return string.IsNullOrWhiteSpace(skillId)
                 ? string.Empty
                 : Path.Combine("UserData", "LongYinCustomKungfuSkill", "Icons", $"{skillId}.png");
+        }
+
+        internal static void UpdateRenamedVanillaSkillNames(string vanillaText)
+        {
+            RenamedVanillaSkillNames.Clear();
+
+            if (string.IsNullOrWhiteSpace(vanillaText))
+            {
+                return;
+            }
+
+            LoadedConfigData configData = LoadConfigData();
+            if (configData.RowCount == 0 || string.IsNullOrWhiteSpace(configData.LoaderCsv))
+            {
+                return;
+            }
+
+            string[] vanillaLines = vanillaText.Replace("\uFEFF", "").Split(new[] { "\r\n", "\n" }, StringSplitOptions.None);
+            string[] customLines = configData.LoaderCsv.Replace("\uFEFF", "").Split(new[] { "\r\n", "\n" }, StringSplitOptions.None);
+            if (vanillaLines.Length <= 1 || customLines.Length <= 1)
+            {
+                return;
+            }
+
+            string[] vanillaHeaders = SplitCsvLine(vanillaLines[0]);
+            string[] customHeaders = SplitCsvLine(customLines[0]);
+            int vanillaIdCol = FindColumnIndex(vanillaHeaders, "id");
+            int vanillaNameCol = FindColumnIndex(vanillaHeaders, "名字");
+            int customIdCol = FindColumnIndex(customHeaders, "id");
+            int customNameCol = FindColumnIndex(customHeaders, "名字");
+            if (vanillaIdCol < 0 || vanillaNameCol < 0 || customIdCol < 0 || customNameCol < 0)
+            {
+                return;
+            }
+
+            var vanillaNameById = new System.Collections.Generic.Dictionary<int, string>();
+            for (int i = 1; i < vanillaLines.Length; i++)
+            {
+                string line = vanillaLines[i];
+                if (string.IsNullOrWhiteSpace(line))
+                {
+                    continue;
+                }
+
+                string[] cells = SplitCsvLine(line);
+                if (int.TryParse(GetCell(cells, vanillaIdCol), NumberStyles.Integer, CultureInfo.InvariantCulture, out int skillId))
+                {
+                    string skillName = GetCell(cells, vanillaNameCol);
+                    if (!string.IsNullOrWhiteSpace(skillName))
+                    {
+                        vanillaNameById[skillId] = skillName;
+                    }
+                }
+            }
+
+            for (int i = 1; i < customLines.Length; i++)
+            {
+                string line = customLines[i];
+                if (string.IsNullOrWhiteSpace(line))
+                {
+                    continue;
+                }
+
+                string[] cells = SplitCsvLine(line);
+                if (!int.TryParse(GetCell(cells, customIdCol), NumberStyles.Integer, CultureInfo.InvariantCulture, out int skillId))
+                {
+                    continue;
+                }
+
+                if (!vanillaNameById.TryGetValue(skillId, out string vanillaName) || string.IsNullOrWhiteSpace(vanillaName))
+                {
+                    continue;
+                }
+
+                string customName = GetCell(cells, customNameCol);
+                if (string.IsNullOrWhiteSpace(customName) || string.Equals(customName, vanillaName, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                RenamedVanillaSkillNames[vanillaName] = customName;
+            }
+        }
+
+        internal static string BuildPatchedSpeHeroText(string speHeroText)
+        {
+            if (string.IsNullOrWhiteSpace(speHeroText) || RenamedVanillaSkillNames.Count == 0)
+            {
+                return null;
+            }
+
+            string replacedText = speHeroText;
+            foreach (var pair in RenamedVanillaSkillNames)
+            {
+                string newText = replacedText.Replace(pair.Key, pair.Value, StringComparison.Ordinal);
+                if (!string.Equals(newText, replacedText, StringComparison.Ordinal))
+                {
+                    LOG.Msg(System.ConsoleColor.Cyan, $"SpeHeroData 已同步功法名：{pair.Key} -> {pair.Value}");
+                    replacedText = newText;
+                }
+            }
+
+            return string.Equals(replacedText, speHeroText, StringComparison.Ordinal) ? null : replacedText;
         }
 
         internal static LoadedConfigData LoadConfigData()
@@ -645,14 +756,21 @@ namespace LongYinCustomKungfuSkill
         [HarmonyPostfix]
         public static void Postfix(string path, Il2CppSystem.Type systemTypeInstance, ref UnityEngine.Object __result)
         {
-            if (!Main.ShouldTraceResourcePath(path))
+            bool isKungFuData = Main.ShouldTraceResourcePath(path);
+            bool isSpeHeroData = Main.ShouldTraceSpeHeroResourcePath(path);
+            if (!isKungFuData && !isSpeHeroData)
             {
                 return;
             }
             try
             {
                 TextAsset textAsset = __result.TryCast<TextAsset>();
-                if (textAsset != null)
+                if (textAsset == null)
+                {
+                    return;
+                }
+
+                if (isKungFuData)
                 {
                     if (!_exportedVanillaKungFuData)
                     {
@@ -660,6 +778,7 @@ namespace LongYinCustomKungfuSkill
                         _exportedVanillaKungFuData = true;
                     }
 
+                    Main.UpdateRenamedVanillaSkillNames(textAsset.text);
                     string mergedText = BuildMergedKungFuText(textAsset.text);
                     if (!string.IsNullOrWhiteSpace(mergedText) && !string.Equals(mergedText, textAsset.text, StringComparison.Ordinal))
                     {
@@ -676,6 +795,24 @@ namespace LongYinCustomKungfuSkill
                     }
 
                     return;
+                }
+
+                if (isSpeHeroData)
+                {
+                    string patchedText = Main.BuildPatchedSpeHeroText(textAsset.text);
+                    if (!string.IsNullOrWhiteSpace(patchedText) && !string.Equals(patchedText, textAsset.text, StringComparison.Ordinal))
+                    {
+                        TextAsset replacement = Main.CreateTextAsset(patchedText, textAsset.name);
+                        if (replacement != null)
+                        {
+                            __result = replacement;
+                            Main.LOG.Msg("已将重命名后的原版功法名称同步注入 GameData/SpeHeroData。");
+                        }
+                        else
+                        {
+                            Main.LOG.Warning("创建替换用 TextAsset 失败，已跳过 GameData/SpeHeroData 注入。");
+                        }
+                    }
                 }
             }
             catch (Exception ex)
