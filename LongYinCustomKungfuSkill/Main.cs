@@ -2,44 +2,33 @@ using System;
 using System.Globalization;
 using System.IO;
 using System.Linq;
-using System.Reflection;
 using System.Text;
 using System.Threading;
 using MelonLoader;
 using HarmonyLib;
 using Il2Cpp;
+using Il2CppInterop.Runtime;
 using Il2CppSystem.Collections.Generic;
 using UnityEngine;
 
-[assembly: MelonInfo(typeof(LongYinCustomKungfuSkill.Main), "LongYinCustomKungfuSkill", "1.0.0", "SaintCirno9", null)]
+[assembly: MelonInfo(typeof(LongYinCustomKungfuSkill.Main), "LongYinCustomKungfuSkill", "2.0.0", "SaintCirno9", null)]
 [assembly: MelonGame("TppStudio", "LongYinLiZhiZhuan")]
 
 namespace LongYinCustomKungfuSkill
 {
     // ─── CSV 行解析结果 ─────────────────────────────────────────────────────────
 
-    /// <summary>自定义 CSV 中的一条原始记录，只保留加载和日志所需的最少信息。</summary>
-    internal sealed class CustomSkillRow
-    {
-        public int ConfigID { get; init; }
-        /// <summary>功法名称。</summary>
-        public string Name { get; init; } = string.Empty;
-
-        /// <summary>是否为召唤技能。</summary>
-        public bool IsSummonSkill { get; init; }
-    }
-
     internal sealed class LoadedConfigData
     {
-        public static readonly LoadedConfigData Empty = new(Array.Empty<CustomSkillRow>(), string.Empty);
+        public static readonly LoadedConfigData Empty = new(0, string.Empty);
 
-        public LoadedConfigData(CustomSkillRow[] rows, string loaderCsv)
+        public LoadedConfigData(int rowCount, string loaderCsv)
         {
-            Rows = rows;
+            RowCount = rowCount;
             LoaderCsv = loaderCsv;
         }
 
-        public CustomSkillRow[] Rows { get; }
+        public int RowCount { get; }
 
         public string LoaderCsv { get; }
     }
@@ -50,12 +39,36 @@ namespace LongYinCustomKungfuSkill
     {
         internal static readonly string ConfigDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "UserData", "LongYinCustomKungfuSkill");
         internal static readonly string ConfigPath = Path.Combine(ConfigDir, "KungfuSkillData.csv");
+        internal static readonly string VanillaExportPath = Path.Combine(ConfigDir, "vanilla_KungfuSkillData.csv");
+        internal static readonly string IconDir = Path.Combine(ConfigDir, "Icons");
+        internal static int VanillaKungFuMaxId { get; set; } = -1;
+        internal static int VanillaKungFuTotalCount { get; set; } = 0;
 
-        // CSV 模板：名字列为主键，必须与游戏内功法名称完全一致
-        // 示例：将原版太祖长拳的等级改为5
+        private const string TargetResourcePath = "GameData/KungFuData";
+        private static readonly System.Collections.Generic.HashSet<int> InjectedCustomSkillIds = new();
+
+        /// <summary>自定义技能 ID 到重定向图标 ID 的映射。</summary>
+        internal static readonly System.Collections.Generic.Dictionary<string, string> CustomSkillIdToIconId = new(StringComparer.Ordinal);
+        internal static readonly System.Collections.Generic.Dictionary<string, System.Collections.Generic.List<int>> VanillaSkillIdsByType = new(StringComparer.Ordinal);
+        internal static readonly System.Collections.Generic.Dictionary<string, int> CustomSkillIconAssignCountByType = new(StringComparer.Ordinal);
+        internal static readonly System.Collections.Generic.Dictionary<string, Sprite> CustomSkillIconCache = new(StringComparer.Ordinal);
+        internal static readonly System.Collections.Generic.HashSet<string> CheckedCustomSkillIconIds = new(StringComparer.Ordinal);
+        private static LoadedConfigData _cachedConfigData = LoadedConfigData.Empty;
+        private static DateTime _cachedConfigWriteTimeUtc = DateTime.MinValue;
+
+        // CSV 模板：默认包含一条原版覆盖数据和多条不同类型的新增功法测试数据
         private static readonly string DefaultCsv =
             "id,类别,等级,名字,描述,基础威力,经验系数,修炼效果,运功效果,威力系数,修炼需求,攻击范围,伤害范围,使用特效,内力消耗,所属势力,使用目标,攻击架势,防御架势,召唤ID,使用次数,动作,子弹,特效,使用武器,伤害顺序,角色位移,Trail,隐藏\r\n" +
-            "9,拳掌,5,太祖长拳Pro,相传本朝太祖所创的基础拳法,10,1.1,拳掌1,,力道2;拳掌1;内力0.3,,\"0,0,4\",\"0,0,1\",伤害0.04,5,-1,0,胸15,胸10,,,skill0_0,,打击5-Target-Grid-Happen,拳,Same,FALSE,0,0\r\n";
+            "9,拳掌,5,太祖长拳·改,相传本朝太祖所创的基础拳法,10,1.1,拳掌1,,力道2;拳掌1;内力0.3,,\"0,0,4\",\"0,0,1\",伤害0.04,5,-1,0,胸15,胸10,,,skill0_0,,打击5-Target-Grid-Happen,拳,Same,FALSE,0,1\r\n" +
+            "996,拳掌,5,太祖不短拳,相传本朝太祖所创的基础拳法,10,1.1,拳掌1,,力道2;拳掌1;内力0.3,,\"1,1,1\",\"0,0,0\",伤害0.04,5,0,0,胸15,胸10,,,skill0_0,,打击5-Target-Grid-Happen,拳,Same,FALSE,0,1\r\n" +
+            "997,内功,5,太祖吐纳法,呼出浊气，吸入清气，一吐一纳之间，内息造化而成,,0.9,内功1;经脉1,生命上限20;内力上限20;内功4;智力4;经脉4,,,,,,0,0,0,,,,,,,,,Same,FALSE,0,1\r\n" +
+            "998,轻功,5,太祖飞毛腿,源于古代递送紧急军情“羽檄”之兵士的步法,,1,灵巧1,轻功4;灵巧4;速度0.04,,,,,,0,0,0,,,,,,,,,Same,FALSE,0,1\r\n" +
+            "999,绝技,5,太祖铁布衫,基本硬功之一，修习者周身致密坚韧，能够抵御些许来袭之力道,,1,绝技1,体质4;护甲2;减伤2,,,,,,0,0,0,,,,,,,,,Same,FALSE,0,1\r\n" +
+            "1000,剑法,5,太祖御剑术,击、刺、格、洗四种基础剑招的汇总口诀,10,1.1,剑法1,,灵巧2;剑法1;内力0.1,,\"4,0,0\",\"4,1,2\",命中0.04,5,0,0,手14,手10,,,skill1_1,,劈砍-Target-Grid-Happen,剑,Same,FALSE,0,1\r\n" +
+            "1001,刀法,5,太祖拔刀功,拔刀，劈刀，收刀，只此最简单的动作，却是一切刀法之基,10,1.1,刀法1,,体质2;刀法1;内力0.1,,\"4,0,0\",\"5,1,2\",暴击0.04,5,0,0,心14,心10,,,skill2_1,,三连剑影小-Target-Grid-Happen,刀,Same,FALSE,0,1\r\n" +
+            "1002,长兵,5,太祖长棍法,相传本朝太祖所创的基础棍法,10,1.1,长兵1,,意志2;长兵1;内力0.1,,\"1,1,1\",\"7,0,0\",连击0.04,5,0,0,头15,头10,,,skill3_1,,打击5-Target-Grid-Happen,长兵,Same,FALSE,0,1\r\n" +
+            "1003,奇门,5,太祖三路鞭,分为上中下三路的基本鞭法,10,1.1,奇门1,,智力2;奇门1;内力0.1,,\"3,1,1\",\"7,0,0\",震脑0.04,5,0,0,头14,头6,,,skill4_3,,乱刃-Target-Grid-Happen,鞭,Same,FALSE,0,1\r\n" +
+            "1004,射术,5,太祖飞镖诀,一门使用飞镖的基础手法,10,1.1,射术1,,灵巧2;射术1;内力0.1,,\"0,2,3\",\"0,0,0\",流血0.04,5,0,0,腹20,腹3,,,skill5_0,1-----0.9,三连劈砍-Target-Grid-Happen,,Same,FALSE,0,1\r\n";
 
         public static readonly MelonLogger.Instance LOG = Melon<Main>.Logger;
 
@@ -71,6 +84,8 @@ namespace LongYinCustomKungfuSkill
             try
             {
                 Directory.CreateDirectory(ConfigDir);
+                Directory.CreateDirectory(IconDir);
+                IconExportManager.EnsureConfigExists();
                 if (!File.Exists(ConfigPath))
                 {
                     File.WriteAllText(ConfigPath, DefaultCsv, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
@@ -83,321 +98,286 @@ namespace LongYinCustomKungfuSkill
             }
         }
 
-    }
-
-    // ─── HarmonyPatch：在开始菜单初始化后按名称覆盖原版功法属性 ─────────────────
-
-    [HarmonyPatch(typeof(StartMenuController), nameof(StartMenuController.Start))]
-    public class KungfuSkillDatabasePatch
-    {
-        // 防重复：MelonLoader 只加载一次 Mod，静态字段不随场景切换重置
-        private static bool _initialized = false;
-
-        // 必要列名组：仅支持原版 KungFuData.csv 表头
-        private static readonly string[] RequiredColumns =
+        internal static bool ShouldTraceResourcePath(string path)
         {
-            "id",
-            "名字",
-            "类别",
-            "等级",
-        };
-
-        [HarmonyPostfix]
-        public static void Postfix()
-        {
-            if (_initialized)
-            {
-                Main.LOG.Msg("KungfuSkill 已在本次游戏会话中初始化，跳过重复覆盖。");
-                return;
-            }
-
-            List<KungfuSkillData> skillList = GameDataController.Instance?.kungfuSkillDataBase;
-            if (skillList is not { Count: > 0 })
-            {
-                Main.LOG.Warning("KungfuSkill 数据库未就绪，已跳过功法属性覆盖。");
-                return;
-            }
-
-            // 先导出原版数据（覆盖前），方便玩家查看并制作修改 CSV
-            ExportVanillaSkills(skillList);
-
-            int count = OverrideExistingSkillsById(skillList);
-            Main.LOG.Msg($"KungfuSkill 覆盖处理完成，共覆盖 {count} 条原版功法属性。");
-            _initialized = true;
+            return !string.IsNullOrWhiteSpace(path) &&
+                   string.Equals(path.Trim(), TargetResourcePath, StringComparison.OrdinalIgnoreCase);
         }
 
-        // ── 释放原版功法数据模块到 CSV ──
-
-        private static readonly string ExportPath = Path.Combine(Main.ConfigDir, "vanilla_KungfuSkillData.csv");
-
-        private static void ExportVanillaSkills(List<KungfuSkillData> skillList)
+        internal static void ResetInjectedCustomSkillIds()
         {
+            InjectedCustomSkillIds.Clear();
+        }
+
+        internal static void TrimInjectedCustomSkillState(int firstMissingId)
+        {
+            if (firstMissingId < 0)
+            {
+                return;
+            }
+
+            InjectedCustomSkillIds.RemoveWhere(skillId => skillId >= firstMissingId);
+
+            var keysToRemove = CustomSkillIdToIconId.Keys
+                .Where(key => int.TryParse(key, NumberStyles.Integer, CultureInfo.InvariantCulture, out int skillId) && skillId >= firstMissingId)
+                .ToList();
+
+            foreach (string key in keysToRemove)
+            {
+                CustomSkillIdToIconId.Remove(key);
+            }
+        }
+
+        internal static void RegisterInjectedCustomSkillId(int skillId)
+        {
+            if (skillId >= 0)
+            {
+                InjectedCustomSkillIds.Add(skillId);
+            }
+        }
+
+        internal static void ResetVanillaSkillIdsByType()
+        {
+            VanillaSkillIdsByType.Clear();
+            CustomSkillIconAssignCountByType.Clear();
+        }
+
+        internal static void RegisterVanillaSkillType(string skillType, int skillId)
+        {
+            if (string.IsNullOrWhiteSpace(skillType) || skillId < 0)
+            {
+                return;
+            }
+
+            if (!VanillaSkillIdsByType.TryGetValue(skillType, out System.Collections.Generic.List<int> skillIds))
+            {
+                skillIds = new System.Collections.Generic.List<int>();
+                VanillaSkillIdsByType[skillType] = skillIds;
+            }
+
+            if (!skillIds.Contains(skillId))
+            {
+                skillIds.Add(skillId);
+            }
+        }
+
+        internal static string GetSuggestedIconIdForType(string skillType)
+        {
+            if (!string.IsNullOrWhiteSpace(skillType) &&
+                VanillaSkillIdsByType.TryGetValue(skillType, out System.Collections.Generic.List<int> skillIds) &&
+                skillIds.Count > 0)
+            {
+                CustomSkillIconAssignCountByType.TryGetValue(skillType, out int assignedCount);
+                int iconSkillId = skillIds[assignedCount % skillIds.Count];
+                CustomSkillIconAssignCountByType[skillType] = assignedCount + 1;
+                return iconSkillId.ToString(CultureInfo.InvariantCulture);
+            }
+
+            return "0";
+        }
+
+        internal static void ExportVanillaSkillsFromResource(TextAsset textAsset)
+        {
+            if (textAsset == null || string.IsNullOrWhiteSpace(textAsset.text))
+            {
+                return;
+            }
+
             try
             {
-                Directory.CreateDirectory(Main.ConfigDir);
-
-                // 优先尝试从游戏里提取实时的 TextAsset（保证跨版本最新）
-                // 感谢 Asset Studio 解包提供的路径名
-                UnityEngine.TextAsset liveAsset = UnityEngine.Resources.Load<UnityEngine.TextAsset>("gamedata/kungfudata");
-                if (liveAsset != null && !string.IsNullOrEmpty(liveAsset.text))
+                Directory.CreateDirectory(ConfigDir);
+                File.WriteAllText(VanillaExportPath, textAsset.text, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
+                LOG.Msg($"已将【实时提取】的完整版原版功法数据释放到：{VanillaExportPath}");
+                if (IconExportManager.IsDebugIconExportEnabled())
                 {
-                    File.WriteAllText(ExportPath, liveAsset.text, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
-                    Main.LOG.Msg($"已将【实时提取】的完整版原版功法数据释放到：{ExportPath}");
+                    LOG.Msg($"已在配置文件 LongYinCustomKungfuSkill.cfg 中开启原版功法图标导出。请进入一次游戏世界或载入一次存档，触发图标加载后会导出到：{IconExportManager.VanillaIconExportDir}");
                 }
                 else
                 {
-                    Main.LOG.Warning("未能提取游戏中实时的配置。");
+                    LOG.Msg("如需导出原版功法图标，可在配置文件 LongYinCustomKungfuSkill.cfg 中将 EnableExportVanillaIcons 改为 true。");
                 }
             }
             catch (Exception ex)
             {
-                Main.LOG.Warning($"释放原版功法模板失败：{ex.GetType().Name} - {ex.Message}");
+                LOG.Warning($"释放原版功法模板失败：{ex.GetType().Name} - {ex.Message}");
             }
         }
 
-
-        // ── 按名称覆盖原版功法属性 ──
-
-        private static int OverrideExistingSkillsById(List<KungfuSkillData> skillList)
+        internal static TextAsset CreateTextAsset(string text, string name = null)
         {
-            LoadedConfigData configData = LoadConfigData();
-            if (configData.Rows.Length == 0)
+            if (string.IsNullOrWhiteSpace(text))
             {
-                return 0;
+                return null;
             }
 
-            GameDataController controller = GameDataController.Instance;
-            if (controller == null)
+            IntPtr ptr = IL2CPP.il2cpp_object_new(Il2CppClassPointerStore<TextAsset>.NativeClassPtr);
+            if (ptr == IntPtr.Zero)
             {
-                return 0;
+                return null;
+            }
+
+            var asset = new TextAsset(ptr);
+            TextAsset.Internal_CreateInstance(asset, text);
+            if (!string.IsNullOrWhiteSpace(name))
+            {
+                asset.name = name;
+            }
+
+            return asset;
+        }
+
+        internal static bool TryLoadCustomSkillIconSprite(string skillId, out Sprite sprite)
+        {
+            sprite = null;
+            if (string.IsNullOrWhiteSpace(skillId))
+            {
+                return false;
+            }
+
+            if (CustomSkillIconCache.TryGetValue(skillId, out Sprite cachedSprite) && cachedSprite != null)
+            {
+                sprite = cachedSprite;
+                return true;
+            }
+
+            if (CheckedCustomSkillIconIds.Contains(skillId))
+            {
+                return false;
+            }
+
+            string iconPath = Path.Combine(IconDir, $"{skillId}.png");
+            if (!File.Exists(iconPath))
+            {
+                CheckedCustomSkillIconIds.Add(skillId);
+                return false;
             }
 
             try
             {
-                LTCSVLoader loader = BuildNativeLoader(configData.LoaderCsv);
-                int rowCount = loader.GetRow();
-
-                if (rowCount <= 1)
+                byte[] pngBytes = File.ReadAllBytes(iconPath);
+                var texture = new Texture2D(2, 2, TextureFormat.ARGB32, false);
+                if (!ImageConversion.LoadImage(texture, pngBytes))
                 {
-                    Main.LOG.Warning("原生加载器读取 CSV 后没有可用数据行。");
-                    return 0;
+                    UnityEngine.Object.Destroy(texture);
+                    CheckedCustomSkillIconIds.Add(skillId);
+                    LOG.Warning($"读取自定义图标失败：skillID={skillId}, path={iconPath}");
+                    return false;
                 }
 
-                if (rowCount != configData.Rows.Length + 1)
-                {
-                    Main.LOG.Warning($"原生加载器行数与定义不一致：rowCount={rowCount}，rows={configData.Rows.Length}。");
-                    return 0;
-                }
-
-                int successCount = 0;
-                for (int rowIndex = 1; rowIndex < rowCount; rowIndex++)
-                {
-                    CustomSkillRow row = configData.Rows[rowIndex - 1];
-
-                    // 按 ID 查找数据库中的原版条目
-                    KungfuSkillData target = FindInSkillListById(skillList, row.ConfigID);
-                    if (target == null)
-                    {
-                        Main.LOG.Warning($"覆盖跳过：数据库中不存在 ID={row.ConfigID} 的功法，请检查 CSV 是否准确映射。");
-                        continue;
-                    }
-
-                    // 用原生加载器加载出新属性对象
-                    KungfuSkillData newData = controller.LoadSkillData(loader, rowIndex, row.IsSummonSkill);
-                    if (newData == null)
-                    {
-                        Main.LOG.Warning($"覆盖跳过：LoadSkillData 返回 null，名称='{row.Name}'。");
-                        continue;
-                    }
-
-                    // 保留原始 skillID，反射覆盖其余所有公共属性
-                    int originalSkillID = target.skillID;
-                    CopyPublicProperties(newData, target);
-                    target.skillID = originalSkillID;
-
-                    successCount++;
-                    Main.LOG.Msg($"已覆盖原版功法：skillID={target.skillID}，名称={target.name}");
-                    CompareAndLogCsvChanges(target.skillID.ToString());
-                }
-
-                return successCount;
+                texture.name = $"LongYinCustomSkillIcon_{skillId}";
+                texture.wrapMode = TextureWrapMode.Clamp;
+                var rect = new Rect(0f, 0f, texture.width, texture.height);
+                var pivot = new Vector2(0.5f, 0.5f);
+                Sprite loadedSprite = Sprite.Create(texture, rect, pivot, 100f);
+                loadedSprite.name = texture.name;
+                CustomSkillIconCache[skillId] = loadedSprite;
+                CheckedCustomSkillIconIds.Add(skillId);
+                sprite = loadedSprite;
+                return true;
             }
             catch (Exception ex)
             {
-                Main.LOG.Warning($"覆盖功法属性时发生异常：{ex.GetType().Name} - {ex.Message}");
-                return 0;
+                CheckedCustomSkillIconIds.Add(skillId);
+                LOG.Warning($"加载自定义图标异常：skillID={skillId}, path={iconPath}，{ex.GetType().Name} - {ex.Message}");
+                return false;
             }
         }
 
-        /// <summary>通过反射将 src 的所有可写公共实例属性复制到 dst（Il2Cpp 类型成员是属性而非字段）。</summary>
-        private static void CopyPublicProperties(KungfuSkillData src, KungfuSkillData dst)
+        internal static bool HasCustomSkillIconFile(string skillId)
         {
-            System.Type type = typeof(KungfuSkillData);
-            foreach (PropertyInfo prop in type.GetProperties(BindingFlags.Public | BindingFlags.Instance))
-            {
-                if (!prop.CanRead || !prop.CanWrite || prop.Name == "skillID")
-                {
-                    continue;
-                }
-
-                try
-                {
-                    object value = prop.GetValue(src);
-                    prop.SetValue(dst, value);
-                }
-                catch
-                {
-                    // 忽略个别不可写或类型不兼容的属性
-                }
-            }
+            return !string.IsNullOrWhiteSpace(skillId) &&
+                   File.Exists(Path.Combine(IconDir, $"{skillId}.png"));
         }
 
-        private static void CompareAndLogCsvChanges(string skillIdStr)
+        internal static string GetCustomSkillIconPath(string skillId)
         {
-            try
-            {
-                if (!File.Exists(Main.ConfigPath) || !File.Exists(ExportPath)) return;
-
-                string[] customLines = ReadAllLinesShared(Main.ConfigPath);
-                string[] vanillaLines = ReadAllLinesShared(ExportPath);
-                if (customLines.Length < 1 || vanillaLines.Length < 1) return;
-
-                var headers = SplitCsvLine(vanillaLines[0]);
-                int idCol = Math.Max(0, Array.IndexOf(headers, "id"));
-                var customRow = customLines.Skip(1).Select(SplitCsvLine).FirstOrDefault(r => r.Length > idCol && r[idCol] == skillIdStr);
-                var vanillaRow = vanillaLines.Skip(1).Select(SplitCsvLine).FirstOrDefault(r => r.Length > idCol && r[idCol] == skillIdStr);
-
-                if (customRow == null || vanillaRow == null) return;
-
-                List<string> changes = new List<string>();
-                int cols = Math.Min(headers.Length, Math.Min(customRow.Length, vanillaRow.Length));
-                for (int i = 0; i < cols; i++)
-                {
-                    if (headers[i] == "id") continue; // 忽略 ID 报错
-                    if (customRow[i] != vanillaRow[i])
-                    {
-                        changes.Add($"{headers[i]}: {vanillaRow[i]} -> {customRow[i]}");
-                    }
-                }
-
-                if (changes.Count > 0)
-                {
-                    Main.LOG.Msg("  -> CSV修改项：");
-                    for (int j = 0; j < changes.Count; j++)
-                    {
-                        Main.LOG.Msg($"        {changes[j]}");
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                Main.LOG.Warning($"比较 CSV 变动时出现异常：{ex.Message}");
-            }
+            return string.IsNullOrWhiteSpace(skillId)
+                ? string.Empty
+                : Path.Combine("UserData", "LongYinCustomKungfuSkill", "Icons", $"{skillId}.png");
         }
 
-
-
-        private static KungfuSkillData FindInSkillListById(List<KungfuSkillData> skillList, int id)
+        internal static LoadedConfigData LoadConfigData()
         {
-            for (int i = 0; i < skillList.Count; i++)
+            EnsureConfigExists();
+
+            if (!File.Exists(ConfigPath))
             {
-                KungfuSkillData skill = skillList[i];
-                if (skill != null && skill.skillID == id)
-                {
-                    return skill;
-                }
-            }
-
-            return null;
-        }
-
-        private static LTCSVLoader BuildNativeLoader(string csv)
-        {
-            var loader = new LTCSVLoader();
-            loader.ReadMultiLine(csv);
-            return loader;
-        }
-
-
-        // ── 从 CSV 解析最少元数据，并把原始文本直接交给 LTCSVLoader ──
-
-        private static LoadedConfigData LoadConfigData()
-        {
-            Main.EnsureConfigExists();
-
-            if (!File.Exists(Main.ConfigPath))
-            {
-                Main.LOG.Warning($"配置文件不存在：{Main.ConfigPath}");
+                LOG.Warning($"配置文件不存在：{ConfigPath}");
                 return LoadedConfigData.Empty;
             }
 
             try
             {
-                string[] lines = ReadAllLinesShared(Main.ConfigPath);
+                DateTime lastWriteTimeUtc = File.GetLastWriteTimeUtc(ConfigPath);
+                if (_cachedConfigData.RowCount >= 0 &&
+                    _cachedConfigWriteTimeUtc == lastWriteTimeUtc &&
+                    !string.IsNullOrWhiteSpace(_cachedConfigData.LoaderCsv))
+                {
+                    return _cachedConfigData;
+                }
+
+                string[] lines = ReadAllLinesShared(ConfigPath);
                 if (lines.Length <= 1)
                 {
-                    Main.LOG.Warning("配置文件为空，未加载任何功法。");
+                    LOG.Warning("配置文件为空，未加载任何功法。");
                     return LoadedConfigData.Empty;
                 }
 
                 string[] headers = SplitCsvLine(lines[0]);
-
-                // 检查必要列是否齐全
                 if (!ValidateHeaders(headers))
                 {
-                    Main.LOG.Error("配置文件表头缺少必要列，已中止加载。");
+                    LOG.Error("配置文件表头缺少必要列，已中止加载。");
                     return LoadedConfigData.Empty;
                 }
 
                 int idCol = FindColumnIndex(headers, "id");
                 int nameCol = FindColumnIndex(headers, "名字");
+                int typeCol = FindColumnIndex(headers, "类别");
                 int summonIdCol = FindColumnIndex(headers, "召唤ID");
 
-                var rows = new System.Collections.Generic.List<CustomSkillRow>();
-                // 以功法 ID 为主键去重
                 var seenIDs = new System.Collections.Generic.HashSet<int>();
                 var loaderLines = new System.Collections.Generic.List<string> { lines[0] };
+                int rowCount = 0;
 
                 for (int row = 1; row < lines.Length; row++)
                 {
                     string line = lines[row].Trim();
-                    // 跳过空行和注释行（# 开头）
                     if (string.IsNullOrWhiteSpace(line) || line.StartsWith('#'))
                     {
                         continue;
                     }
 
                     string[] cells = SplitCsvLine(line);
-                    CustomSkillRow parsedRow = ParseRow(cells, row + 1, idCol, nameCol, summonIdCol);
-                    if (parsedRow == null)
+                    int parsedSkillId = ParseRow(cells, row + 1, idCol, nameCol);
+                    if (parsedSkillId < 0)
                     {
                         continue;
                     }
 
-                    if (!seenIDs.Add(parsedRow.ConfigID))
+                    if (!seenIDs.Add(parsedSkillId))
                     {
-                        Main.LOG.Warning($"第 {row + 1} 行：功法 ID={parsedRow.ConfigID} 重复，已跳过。");
+                        LOG.Warning($"第 {row + 1} 行：功法 ID={parsedSkillId} 重复，已跳过。");
                         continue;
                     }
 
-                    rows.Add(parsedRow);
+                    rowCount++;
                     loaderLines.Add(line);
                 }
 
-                Main.LOG.Msg($"从 CSV 加载了 {rows.Count} 条覆盖配置。");
-                return new LoadedConfigData(rows.ToArray(), string.Join("\r\n", loaderLines) + "\r\n");
+                LOG.Msg($"从 CSV 加载了 {rowCount} 条覆盖配置。");
+                LoadedConfigData loadedData = new(rowCount, string.Join("\r\n", loaderLines) + "\r\n");
+                _cachedConfigData = loadedData;
+                _cachedConfigWriteTimeUtc = lastWriteTimeUtc;
+                return loadedData;
             }
             catch (Exception ex)
             {
-                Main.LOG.Error($"读取配置文件时发生异常：{ex}");
+                LOG.Error($"读取配置文件时发生异常：{ex}");
                 return LoadedConfigData.Empty;
             }
         }
 
-
-        // ─── CSV 解析辅助 ────────────────────────────────────────────────────────
-
-        private static int FindColumnIndex(string[] headers, string columnName)
+        internal static int FindColumnIndex(string[] headers, string columnName)
         {
             for (int i = 0; i < headers.Length; i++)
             {
@@ -410,102 +390,7 @@ namespace LongYinCustomKungfuSkill
             return -1;
         }
 
-        /// <summary>解析一行 CSV 数据为最少元数据；解析失败返回 null。</summary>
-        private static CustomSkillRow ParseRow(string[] cells, int rowNum, int idCol, int nameCol, int summonIdCol)
-        {
-            try
-            {
-                int skillID = ParseInt(GetCell(cells, idCol), -1);
-
-                string name = GetCell(cells, nameCol);
-                if (string.IsNullOrWhiteSpace(name))
-                {
-                    Main.LOG.Warning($"第 {rowNum} 行：名称为空，已跳过。");
-                    return null;
-                }
-
-                return new CustomSkillRow
-                {
-                    ConfigID = skillID,
-                    Name = name,
-                    IsSummonSkill = ParseInt(GetCell(cells, summonIdCol), 0) > 0,
-                };
-            }
-            catch (Exception ex)
-            {
-                Main.LOG.Error($"第 {rowNum} 行解析异常：{ex.GetType().Name} - {ex.Message}");
-                return null;
-            }
-        }
-
-        private static bool ValidateHeaders(string[] headers)
-        {
-            var headerSet = new System.Collections.Generic.HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (string h in headers)
-            {
-                headerSet.Add(h.Trim('\uFEFF', ' ', '\t'));
-            }
-
-            bool allPresent = true;
-            foreach (string column in RequiredColumns)
-            {
-                if (!headerSet.Contains(column))
-                {
-                    Main.LOG.Error($"配置文件缺少必要列：\"{column}\"");
-                    allPresent = false;
-                }
-            }
-
-            return allPresent;
-        }
-
-        // 带重试的文件读取，支持 UTF-8 与 GBK 编码回退，规避编辑器占用
-        private static string[] ReadAllLinesShared(string path, int maxAttempts = 5)
-        {
-            for (int attempt = 1; attempt <= maxAttempts; attempt++)
-            {
-                try
-                {
-                    byte[] bytes;
-                    using (var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
-                    {
-                        using (var ms = new MemoryStream())
-                        {
-                            stream.CopyTo(ms);
-                            bytes = ms.ToArray();
-                        }
-                    }
-
-                    try
-                    {
-                        // 尝试以严格模式读取 UTF-8，如果不符合标准则抛出异常以便回退
-                        Encoding strictUtf8 = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);
-                        string textUtf8 = strictUtf8.GetString(bytes);
-                        return textUtf8.Replace("\uFEFF", "").Split(new[] { "\r\n", "\n" }, StringSplitOptions.None);
-                    }
-                    catch (DecoderFallbackException)
-                    {
-                        Main.LOG.Warning($"[{Path.GetFileName(path)}] 不符合标准 UTF-8 编码，可能是由于系统自带 Excel 直接保存导致，已启动 GBK 容错解析...");
-                        string textGbk = Encoding.GetEncoding("gbk").GetString(bytes);
-                        return textGbk.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None);
-                    }
-                }
-                catch (IOException) when (attempt < maxAttempts)
-                {
-                    Thread.Sleep(50 * attempt);
-                }
-            }
-
-            // 最后一次如果不成功让其自然抛出异常，依然附带 ReadWrite 权限以尽量提供最高容忍度
-            using (var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
-            using (var reader = new StreamReader(stream, Encoding.UTF8))
-            {
-                return reader.ReadToEnd().Split(new[] { "\r\n", "\n" }, StringSplitOptions.None);
-            }
-        }
-
-        /// <summary>支持引号转义的 RFC 4180 CSV 行拆分。</summary>
-        private static string[] SplitCsvLine(string line)
+        internal static string[] SplitCsvLine(string line)
         {
             var cells = new System.Collections.Generic.List<string>();
             var current = new StringBuilder();
@@ -516,7 +401,6 @@ namespace LongYinCustomKungfuSkill
                 char c = line[i];
                 if (c == '"')
                 {
-                    // 双引号转义（""）
                     if (inQuotes && i + 1 < line.Length && line[i + 1] == '"')
                     {
                         current.Append('"');
@@ -542,19 +426,510 @@ namespace LongYinCustomKungfuSkill
 
             if (inQuotes)
             {
-                Main.LOG.Warning($"CSV 行引号未正确闭合：{line}");
+                LOG.Warning($"CSV 行引号未正确闭合：{line}");
             }
 
             return cells.ToArray();
         }
 
-        private static string GetCell(string[] cells, int index)
+        internal static bool ValidateContinuousSkillIds(System.Collections.Generic.List<string> outputLines, int idCol, out string errorMessage, out int firstMissingId)
+        {
+            errorMessage = null;
+            firstMissingId = -1;
+            if (outputLines == null || outputLines.Count <= 1 || idCol < 0)
+            {
+                return true;
+            }
+
+            var sortedIds = new System.Collections.Generic.List<int>();
+            for (int i = 1; i < outputLines.Count; i++)
+            {
+                string line = outputLines[i];
+                if (string.IsNullOrWhiteSpace(line))
+                {
+                    continue;
+                }
+
+                string[] cells = SplitCsvLine(line);
+                string idText = GetCell(cells, idCol);
+                if (int.TryParse(idText, NumberStyles.Integer, CultureInfo.InvariantCulture, out int skillId))
+                {
+                    sortedIds.Add(skillId);
+                }
+            }
+
+            if (sortedIds.Count <= 1)
+            {
+                return true;
+            }
+
+            sortedIds.Sort();
+            var missingIds = new System.Collections.Generic.List<int>();
+            for (int i = 1; i < sortedIds.Count; i++)
+            {
+                int previousId = sortedIds[i - 1];
+                int currentId = sortedIds[i];
+                if (currentId == previousId)
+                {
+                    firstMissingId = currentId;
+                    errorMessage = $"功法 ID 不允许重复，检测到重复 ID：{currentId}。重复 ID {currentId} 之后的功法均未注入。";
+                    return false;
+                }
+
+                if (currentId == previousId + 1)
+                {
+                    continue;
+                }
+
+                for (int missingId = previousId + 1; missingId < currentId; missingId++)
+                {
+                    missingIds.Add(missingId);
+                    if (missingIds.Count >= 16)
+                    {
+                        break;
+                    }
+                }
+
+                if (missingIds.Count >= 16)
+                {
+                    break;
+                }
+            }
+
+            if (missingIds.Count == 0)
+            {
+                return true;
+            }
+
+            firstMissingId = missingIds[0];
+            errorMessage = $"功法 ID 必须连续，检测到缺失 ID：{string.Join(", ", missingIds)}";
+            if (missingIds.Count >= 16)
+            {
+                errorMessage += " ...";
+            }
+
+            errorMessage += $"。缺失 ID {firstMissingId} 之后的功法均未注入。";
+
+            return false;
+        }
+
+        internal static System.Collections.Generic.List<string> TrimOutputLinesBeforeMissingId(System.Collections.Generic.List<string> outputLines, int idCol, int firstMissingId)
+        {
+            if (outputLines == null || outputLines.Count == 0 || idCol < 0 || firstMissingId < 0)
+            {
+                return outputLines;
+            }
+
+            var trimmedLines = new System.Collections.Generic.List<string> { outputLines[0] };
+            for (int i = 1; i < outputLines.Count; i++)
+            {
+                string line = outputLines[i];
+                if (string.IsNullOrWhiteSpace(line))
+                {
+                    continue;
+                }
+
+                string[] cells = SplitCsvLine(line);
+                string idText = GetCell(cells, idCol);
+                if (!int.TryParse(idText, NumberStyles.Integer, CultureInfo.InvariantCulture, out int skillId) || skillId < firstMissingId)
+                {
+                    trimmedLines.Add(line);
+                }
+            }
+
+            return trimmedLines;
+        }
+
+        internal static string GetCell(string[] cells, int index)
         {
             return index >= 0 && index < cells.Length ? cells[index].Trim() : string.Empty;
         }
 
+        private static int ParseRow(string[] cells, int rowNum, int idCol, int nameCol)
+        {
+            try
+            {
+                int skillID = ParseInt(GetCell(cells, idCol), -1);
+                if (skillID < 0)
+                {
+                    LOG.Warning($"第 {rowNum} 行：功法 ID 无效，已跳过。");
+                    return -1;
+                }
+
+                string name = GetCell(cells, nameCol);
+                if (string.IsNullOrWhiteSpace(name))
+                {
+                    LOG.Warning($"第 {rowNum} 行：名称为空，已跳过。");
+                    return -1;
+                }
+
+                return skillID;
+            }
+            catch (Exception ex)
+            {
+                LOG.Error($"第 {rowNum} 行解析异常：{ex.GetType().Name} - {ex.Message}");
+                return -1;
+            }
+        }
+
+        private static bool ValidateHeaders(string[] headers)
+        {
+            string[] requiredColumns = { "id", "名字", "类别", "等级" };
+            var headerSet = new System.Collections.Generic.HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (string h in headers)
+            {
+                headerSet.Add(h.Trim('\uFEFF', ' ', '\t'));
+            }
+
+            bool allPresent = true;
+            foreach (string column in requiredColumns)
+            {
+                if (!headerSet.Contains(column))
+                {
+                    LOG.Error($"配置文件缺少必要列：\"{column}\"");
+                    allPresent = false;
+                }
+            }
+
+            return allPresent;
+        }
+
+        private static string[] ReadAllLinesShared(string path, int maxAttempts = 5)
+        {
+            for (int attempt = 1; attempt <= maxAttempts; attempt++)
+            {
+                try
+                {
+                    byte[] bytes;
+                    using (var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+                    using (var ms = new MemoryStream())
+                    {
+                        stream.CopyTo(ms);
+                        bytes = ms.ToArray();
+                    }
+
+                    try
+                    {
+                        Encoding strictUtf8 = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);
+                        string textUtf8 = strictUtf8.GetString(bytes);
+                        return textUtf8.Replace("\uFEFF", "").Split(new[] { "\r\n", "\n" }, StringSplitOptions.None);
+                    }
+                    catch (DecoderFallbackException)
+                    {
+                        LOG.Warning($"[{Path.GetFileName(path)}] 不符合标准 UTF-8 编码，已启动 GBK 容错解析...");
+                        string textGbk = Encoding.GetEncoding("gbk").GetString(bytes);
+                        return textGbk.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None);
+                    }
+                }
+                catch (IOException) when (attempt < maxAttempts)
+                {
+                    Thread.Sleep(50 * attempt);
+                }
+            }
+
+            using var finalStream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+            using var reader = new StreamReader(finalStream, Encoding.UTF8);
+            return reader.ReadToEnd().Split(new[] { "\r\n", "\n" }, StringSplitOptions.None);
+        }
+
         private static int ParseInt(string text, int fallback)
             => int.TryParse(text?.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out int v) ? v : fallback;
+
+    }
+
+    [HarmonyPatch(typeof(Resources), nameof(Resources.Load), new[] { typeof(string), typeof(Il2CppSystem.Type) })]
+    public static class ResourcesLoadPatch
+    {
+        private static bool _exportedVanillaKungFuData = false;
+
+        [HarmonyPostfix]
+        public static void Postfix(string path, Il2CppSystem.Type systemTypeInstance, ref UnityEngine.Object __result)
+        {
+            if (!Main.ShouldTraceResourcePath(path))
+            {
+                return;
+            }
+            try
+            {
+                TextAsset textAsset = __result.TryCast<TextAsset>();
+                if (textAsset != null)
+                {
+                    if (!_exportedVanillaKungFuData)
+                    {
+                        Main.ExportVanillaSkillsFromResource(textAsset);
+                        _exportedVanillaKungFuData = true;
+                    }
+
+                    string mergedText = BuildMergedKungFuText(textAsset.text);
+                    if (!string.IsNullOrWhiteSpace(mergedText) && !string.Equals(mergedText, textAsset.text, StringComparison.Ordinal))
+                    {
+                        TextAsset replacement = Main.CreateTextAsset(mergedText, textAsset.name);
+                        if (replacement != null)
+                        {
+                            __result = replacement;
+                            Main.LOG.Msg("已将自定义功法配置直接注入 GameData/KungFuData。");
+                        }
+                        else
+                        {
+                            Main.LOG.Warning("创建替换用 TextAsset 失败，已跳过资源级功法注入。");
+                        }
+                    }
+
+                    return;
+                }
+            }
+            catch (Exception ex)
+            {
+                Main.LOG.Warning($"Resources.Load 结果转 TextAsset 失败：path={path}，异常：{ex.GetType().Name} - {ex.Message}");
+            }
+        }
+
+        private static string BuildMergedKungFuText(string vanillaText)
+        {
+            if (string.IsNullOrWhiteSpace(vanillaText))
+            {
+                return null;
+            }
+
+            LoadedConfigData configData = Main.LoadConfigData();
+            if (configData.RowCount == 0 || string.IsNullOrWhiteSpace(configData.LoaderCsv))
+            {
+                return null;
+            }
+
+            string[] vanillaLines = vanillaText.Replace("\uFEFF", "").Split(new[] { "\r\n", "\n" }, StringSplitOptions.None);
+            string[] customLines = configData.LoaderCsv.Replace("\uFEFF", "").Split(new[] { "\r\n", "\n" }, StringSplitOptions.None);
+            if (vanillaLines.Length == 0 || customLines.Length <= 1)
+            {
+                return null;
+            }
+
+            string[] vanillaHeaders = Main.SplitCsvLine(vanillaLines[0]);
+            string[] customHeaders = Main.SplitCsvLine(customLines[0]);
+            int vanillaIdCol = Main.FindColumnIndex(vanillaHeaders, "id");
+            int vanillaTypeCol = Main.FindColumnIndex(vanillaHeaders, "类别");
+            int customIdCol = Main.FindColumnIndex(customHeaders, "id");
+            if (vanillaIdCol < 0 || customIdCol < 0)
+            {
+                return null;
+            }
+
+            Main.ResetInjectedCustomSkillIds();
+            Main.ResetVanillaSkillIdsByType();
+            Main.CustomSkillIdToIconId.Clear();
+
+            int vanillaMaxId = -1;
+            int vanillaTotalCount = 0;
+            for (int i = 1; i < vanillaLines.Length; i++)
+            {
+                string vanillaLine = vanillaLines[i];
+                if (string.IsNullOrWhiteSpace(vanillaLine))
+                {
+                    continue;
+                }
+
+                string[] vanillaCells = Main.SplitCsvLine(vanillaLine);
+                string vanillaIdText = Main.GetCell(vanillaCells, vanillaIdCol);
+                if (int.TryParse(vanillaIdText, NumberStyles.Integer, CultureInfo.InvariantCulture, out int parsedVanillaId))
+                {
+                    vanillaTotalCount++;
+                    Main.RegisterVanillaSkillType(Main.GetCell(vanillaCells, vanillaTypeCol), parsedVanillaId);
+                    if (parsedVanillaId > vanillaMaxId)
+                    {
+                        vanillaMaxId = parsedVanillaId;
+                    }
+                }
+            }
+
+            Main.VanillaKungFuMaxId = vanillaMaxId;
+            Main.VanillaKungFuTotalCount = vanillaTotalCount;
+
+            var customById = new System.Collections.Generic.Dictionary<string, string>(StringComparer.Ordinal);
+            for (int i = 1; i < customLines.Length; i++)
+            {
+                string line = customLines[i].Trim();
+                if (string.IsNullOrWhiteSpace(line) || line.StartsWith('#'))
+                {
+                    continue;
+                }
+
+                string[] cells = Main.SplitCsvLine(line);
+                string id = Main.GetCell(cells, customIdCol);
+                if (!string.IsNullOrWhiteSpace(id))
+                {
+                    customById[id] = line;
+                }
+            }
+
+            if (customById.Count == 0)
+            {
+                return null;
+            }
+
+            var outputLines = new System.Collections.Generic.List<string> { vanillaLines[0] };
+            var matchedIds = new System.Collections.Generic.HashSet<string>(StringComparer.Ordinal);
+            var appendedCustomSkillLogs = new System.Collections.Generic.List<(string SkillType, string SkillId, string IconId, bool HasCustomIcon, string CustomIconPath)>();
+
+            for (int i = 1; i < vanillaLines.Length; i++)
+            {
+                string line = vanillaLines[i];
+                
+                // 【修改点】：如果是空行，直接跳过，千万别 Add 到 outputLines 里！
+                if (string.IsNullOrWhiteSpace(line))
+                {
+                    continue; 
+                }
+
+                string[] cells = Main.SplitCsvLine(line);
+                string id = Main.GetCell(cells, vanillaIdCol);
+                if (!string.IsNullOrWhiteSpace(id) && customById.TryGetValue(id, out string replacementLine))
+                {
+                    LogMergedRowChanges(vanillaHeaders, line, replacementLine, id);
+                    outputLines.Add(replacementLine);
+                    matchedIds.Add(id);
+                }
+                else
+                {
+                    outputLines.Add(line);
+                }
+            }
+            foreach (string id in customById.Keys
+                .OrderBy(key => int.TryParse(key, NumberStyles.Integer, CultureInfo.InvariantCulture, out int parsedId) ? parsedId : int.MaxValue)
+                .ThenBy(key => key, StringComparer.Ordinal))
+            {
+                if (!matchedIds.Contains(id))
+                {
+                    outputLines.Add(customById[id]);
+                    string typeStr = string.Empty;
+                    string iconId = null;
+                    bool hasCustomIcon = Main.HasCustomSkillIconFile(id);
+                    string customIconPath = hasCustomIcon ? Main.GetCustomSkillIconPath(id) : string.Empty;
+
+                    if (int.TryParse(id, NumberStyles.Integer, CultureInfo.InvariantCulture, out int customSkillId))
+                    {
+                        Main.RegisterInjectedCustomSkillId(customSkillId);
+
+                        // 根据功法类型分配图标
+                        string[] cells = Main.SplitCsvLine(customById[id]);
+                        int customTypeCol = Main.FindColumnIndex(customHeaders, "类别");
+                        typeStr = Main.GetCell(cells, customTypeCol);
+                        iconId = Main.GetSuggestedIconIdForType(typeStr);
+                        if (!hasCustomIcon && !string.IsNullOrWhiteSpace(iconId))
+                        {
+                            Main.CustomSkillIdToIconId[id] = iconId;
+                        }
+                    }
+
+                    appendedCustomSkillLogs.Add((typeStr, id, iconId, hasCustomIcon, customIconPath));
+                }
+            }
+
+            bool hasContinuousIds = Main.ValidateContinuousSkillIds(outputLines, vanillaIdCol, out string idContinuityError, out int firstMissingId);
+            if (!hasContinuousIds)
+            {
+                Main.LOG.Error($"功法数据合并失败：{idContinuityError}");
+                outputLines = Main.TrimOutputLinesBeforeMissingId(outputLines, vanillaIdCol, firstMissingId);
+                Main.TrimInjectedCustomSkillState(firstMissingId);
+            }
+
+            var visibleAppendedLogs = hasContinuousIds
+                ? appendedCustomSkillLogs
+                : appendedCustomSkillLogs
+                    .Where(x => int.TryParse(x.SkillId, NumberStyles.Integer, CultureInfo.InvariantCulture, out int skillId) && skillId < firstMissingId)
+                    .ToList();
+
+            if (visibleAppendedLogs.Count > 0)
+            {
+                foreach (var group in visibleAppendedLogs.GroupBy(x => string.IsNullOrWhiteSpace(x.SkillType) ? "未分类" : x.SkillType))
+                {
+                    Main.LOG.Msg(ConsoleColor.Cyan, $"新增功法[{group.Key}]：");
+                    foreach (var item in group)
+                    {
+                        if (item.HasCustomIcon)
+                        {
+                            Main.LOG.Msg(ConsoleColor.Cyan, $"  - skillID={item.SkillId} 检测到自定义图标：{item.CustomIconPath}");
+                        }
+                        else if (string.IsNullOrWhiteSpace(item.IconId))
+                        {
+                            Main.LOG.Msg(ConsoleColor.Cyan, $"  - skillID={item.SkillId}");
+                        }
+                        else
+                        {
+                            Main.LOG.Msg(ConsoleColor.Cyan, $"  - skillID={item.SkillId} 分配图标 ID={item.IconId}");
+                        }
+                    }
+                }
+            }
+
+            return string.Join("\r\n", outputLines);
+        }
+
+        private static void LogMergedRowChanges(string[] headers, string vanillaLine, string customLine, string skillId)
+        {
+            string[] vanillaCells = Main.SplitCsvLine(vanillaLine);
+            string[] customCells = Main.SplitCsvLine(customLine);
+            int cols = Math.Min(headers.Length, Math.Min(vanillaCells.Length, customCells.Length));
+            var changes = new System.Collections.Generic.List<string>();
+
+            for (int i = 0; i < cols; i++)
+            {
+                if (string.Equals(headers[i], "id", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                string oldVal = vanillaCells[i];
+                string newVal = customCells[i];
+                if (!string.Equals(oldVal, newVal, StringComparison.Ordinal))
+                {
+                    changes.Add($"{headers[i]}: {oldVal} -> {newVal}");
+                }
+            }
+
+            if (changes.Count == 0)
+            {
+                Main.LOG.Msg($"功法 skillID={skillId} 未检测到实际字段变更。");
+                return;
+            }
+            Main.LOG.Msg(ConsoleColor.DarkYellow, $"功法 skillID={skillId} 将应用以下变更：");
+            foreach (string change in changes)
+            {
+                Main.LOG.Msg(ConsoleColor.DarkYellow, $"  - {change}");
+            }
+        }
+    }
+
+    [HarmonyPatch(typeof(TextureController), nameof(TextureController.LoadAtlasSprite))]
+    public static class TextureControllerLoadAtlasSpritePatch
+    {
+        [HarmonyPrefix]
+        public static bool Prefix(ref string spriteName, ref Sprite __result)
+        {
+            if (string.IsNullOrWhiteSpace(spriteName))
+            {
+                return true;
+            }
+
+            if (int.TryParse(spriteName, NumberStyles.Integer, CultureInfo.InvariantCulture, out int skillId) &&
+                skillId >= 0 &&
+                skillId < Main.VanillaKungFuTotalCount)
+            {
+                return true;
+            }
+
+            if (Main.TryLoadCustomSkillIconSprite(spriteName, out Sprite customSprite))
+            {
+                __result = customSprite;
+                return false;
+            }
+
+            if (Main.CustomSkillIdToIconId.TryGetValue(spriteName, out string mappedIconId))
+            {
+                spriteName = mappedIconId;
+            }
+
+            return true;
+        }
     }
 
 }
