@@ -26,3 +26,5 @@ packages/
 *.tmp
 *.temp
 
+*.zip
+Dump/

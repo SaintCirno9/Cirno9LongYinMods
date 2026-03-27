@@ -1,8 +1,0 @@
-bin/
-obj/
-
-*.zip
-*.user
-*.suo
-
-.vs/
