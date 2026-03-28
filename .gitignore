@@ -28,3 +28,9 @@ packages/
 
 *.zip
 Dump/
+
+# GameSource 目录仅保留脚本和说明文档
+GameSource/**
+!GameSource/
+!GameSource/Extract-DllApi.ps1
+!GameSource/README.md
