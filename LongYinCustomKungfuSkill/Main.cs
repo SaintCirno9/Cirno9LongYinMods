@@ -11,7 +11,7 @@ using Il2CppInterop.Runtime;
 using Il2CppSystem.Collections.Generic;
 using UnityEngine;
 
-[assembly: MelonInfo(typeof(LongYinCustomKungfuSkill.Main), "LongYinCustomKungfuSkill", "2.0.1", "SaintCirno9", null)]
+[assembly: MelonInfo(typeof(LongYinCustomKungfuSkill.Main), "LongYinCustomKungfuSkill", "2.0.2", "SaintCirno9", null)]
 [assembly: MelonGame("TppStudio", "LongYinLiZhiZhuan")]
 
 namespace LongYinCustomKungfuSkill
@@ -242,10 +242,18 @@ namespace LongYinCustomKungfuSkill
                 return false;
             }
 
-            if (CustomSkillIconCache.TryGetValue(skillId, out Sprite cachedSprite) && cachedSprite != null)
+            if (CustomSkillIconCache.TryGetValue(skillId, out Sprite cachedSprite))
             {
-                sprite = cachedSprite;
-                return true;
+                if (cachedSprite != null)
+                {
+                    sprite = cachedSprite;
+                    return true;
+                }
+                else
+                {
+                    CustomSkillIconCache.Remove(skillId);
+                    CheckedCustomSkillIconIds.Remove(skillId);
+                }
             }
 
             if (CheckedCustomSkillIconIds.Contains(skillId))

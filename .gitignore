@@ -21,6 +21,9 @@ packages/
 # dotnet SDK artifacts
 .dotnet/
 
+# Claude Code
+.claude/
+
 # 其他临时文件
 *.log
 *.tmp
