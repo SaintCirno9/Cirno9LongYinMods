@@ -128,7 +128,7 @@ namespace LongYinCustomKungfuSkill
     {
         internal static readonly string ConfigDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "UserData", "LongYinCustomKungfuSkill");
         internal static readonly string ConfigPath = Path.Combine(ConfigDir, "KungfuSkillData.csv");
-        internal static readonly string VanillaExportPath = Path.Combine(ConfigDir, "vanilla_KungfuSkillData.csv");
+        internal static readonly string VanillaExportPath = Path.Combine(ConfigDir, "Vanilla_KungfuSkillData.csv");
         internal static readonly string IconDir = Path.Combine(ConfigDir, "Icons");
         internal static readonly string DataDir = Path.Combine(ConfigDir, "Data");
         internal static readonly string SamplePackDir = Path.Combine(DataDir, "000");
@@ -141,7 +141,6 @@ namespace LongYinCustomKungfuSkill
         private const string SpeHeroResourcePath = "GameData/SpeHeroData";
         private static readonly System.Collections.Generic.HashSet<int> InjectedCustomSkillIds = new();
         private static readonly System.Collections.Generic.Dictionary<string, string> RenamedVanillaSkillNames = new(StringComparer.Ordinal);
-
         /// <summary>自定义技能 ID 到重定向图标 ID 的映射。</summary>
         internal static readonly System.Collections.Generic.Dictionary<string, string> CustomSkillIdToIconId = new(StringComparer.Ordinal);
         internal static readonly System.Collections.Generic.Dictionary<string, System.Collections.Generic.List<int>> VanillaSkillIdsByType = new(StringComparer.Ordinal);
@@ -185,13 +184,14 @@ namespace LongYinCustomKungfuSkill
                 bool hasLegacyIcons = Directory.Exists(IconDir);
                 if (hasLegacyCsv || hasLegacyIcons)
                 {
+                    Directory.CreateDirectory(SamplePackDir);
+                    Directory.CreateDirectory(SamplePackIconDir);
                     LOG.Warning(
                         "检测到旧版根目录配置结构，当前仍会兼容读取。新版建议路径：" +
                         " CSV -> UserData\\LongYinCustomKungfuSkill\\Data\\000\\KungfuSkillData.csv；" +
                         " 图标 -> UserData\\LongYinCustomKungfuSkill\\Data\\000\\Icons");
                 }
-
-                if (!hasLegacyCsv && CollectConfigSources().Count == 0)
+                else if (CollectConfigSources().Count == 0)
                 {
                     Directory.CreateDirectory(SamplePackDir);
                     Directory.CreateDirectory(SamplePackIconDir);
@@ -772,8 +772,7 @@ namespace LongYinCustomKungfuSkill
                         loaderLines.Add(canonicalHeaderLine);
                     }
 
-                    int idCol = FindColumnIndex(headers, "id");
-                    int nameCol = FindColumnIndex(headers, "名字");
+                    var columnMap = new ConfigColumnMap(headers);
                     var seenIdsInSource = new System.Collections.Generic.HashSet<int>();
 
                     for (int row = 1; row < lines.Length; row++)
@@ -785,8 +784,7 @@ namespace LongYinCustomKungfuSkill
                         }
 
                         string[] cells = SplitCsvLine(line);
-                        int parsedSkillId = ParseRow(cells, row + 1, idCol, nameCol);
-                        if (parsedSkillId < 0)
+                        if (!ConfigRowValidator.TryValidateRow(cells, row + 1, source.SourceName, columnMap, out int parsedSkillId))
                         {
                             continue;
                         }
@@ -1011,33 +1009,6 @@ namespace LongYinCustomKungfuSkill
             return index >= 0 && index < cells.Length ? cells[index].Trim() : string.Empty;
         }
 
-        private static int ParseRow(string[] cells, int rowNum, int idCol, int nameCol)
-        {
-            try
-            {
-                int skillID = ParseInt(GetCell(cells, idCol), -1);
-                if (skillID < 0)
-                {
-                    LOG.Warning($"第 {rowNum} 行：功法 ID 无效，已跳过。");
-                    return -1;
-                }
-
-                string name = GetCell(cells, nameCol);
-                if (string.IsNullOrWhiteSpace(name))
-                {
-                    LOG.Warning($"第 {rowNum} 行：名称为空，已跳过。");
-                    return -1;
-                }
-
-                return skillID;
-            }
-            catch (Exception ex)
-            {
-                LOG.Error($"第 {rowNum} 行解析异常：{ex.GetType().Name} - {ex.Message}");
-                return -1;
-            }
-        }
-
         private static bool ValidateHeaders(string[] headers)
         {
             string[] requiredColumns = { "id", "名字", "类别", "等级" };
@@ -1097,9 +1068,6 @@ namespace LongYinCustomKungfuSkill
             using var reader = new StreamReader(finalStream, Encoding.UTF8);
             return reader.ReadToEnd().Split(new[] { "\r\n", "\n" }, StringSplitOptions.None);
         }
-
-        private static int ParseInt(string text, int fallback)
-            => int.TryParse(text?.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out int v) ? v : fallback;
 
     }
 
