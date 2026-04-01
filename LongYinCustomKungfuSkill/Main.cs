@@ -11,7 +11,7 @@ using Il2CppInterop.Runtime;
 using Il2CppSystem.Collections.Generic;
 using UnityEngine;
 
-[assembly: MelonInfo(typeof(LongYinCustomKungfuSkill.Main), "LongYinCustomKungfuSkill", "2.2.0", "SaintCirno9", null)]
+[assembly: MelonInfo(typeof(LongYinCustomKungfuSkill.Main), "LongYinCustomKungfuSkill", "2.2.1", "SaintCirno9", null)]
 [assembly: MelonGame("TppStudio", "LongYinLiZhiZhuan")]
 
 namespace LongYinCustomKungfuSkill
@@ -1439,7 +1439,7 @@ namespace LongYinCustomKungfuSkill
                         if (__result.StartsWith("book_", StringComparison.Ordinal))
                         {
                             string[] parts = __result.Split('_');
-                            if (parts.Length == 3 && int.Parse(parts[1]) > 19)
+                            if (parts.Length == 3 && skillData.belongForceID > 19)
                             {
                                 __result = $"book_-1_{skillData.type}_{parts[2]}";
                             }
@@ -1471,6 +1471,11 @@ namespace LongYinCustomKungfuSkill
             }
 
             if (!Main.IsInjectedCustomSkillId(skillData.skillID))
+            {
+                return true;
+            }
+
+            if (skillData.belongForceID <= 19 && skillData.belongForceID >= 0)
             {
                 return true;
             }
