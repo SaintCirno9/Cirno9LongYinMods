@@ -1,6 +1,6 @@
 using MelonLoader;
 
-[assembly: MelonInfo(typeof(NoGenderLimit.Main), "NoGenderLimit", "0.1.0", "Codex", null)]
+[assembly: MelonInfo(typeof(NoGenderLimit.Main), "NoGenderLimit", "1.0.0", "SaintCirno9", null)]
 [assembly: MelonGame("TppStudio", "LongYinLiZhiZhuan")]
 
 namespace NoGenderLimit
