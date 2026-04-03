@@ -1,0 +1,109 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net6.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <AssemblyName>LongYinCustomBgm</AssemblyName>
+    <RootNamespace>LongYinCustomBgm</RootNamespace>
+    <OutputPath>..\</OutputPath>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <DebugType>none</DebugType>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <GenerateDependencyFile>false</GenerateDependencyFile>
+    <PackageTempDir>$(BaseIntermediateOutputPath)package\</PackageTempDir>
+    <PackageZipPath>$(MSBuildProjectDirectory)\LongYinCustomBgm.zip</PackageZipPath>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="MelonLoader">
+      <HintPath>..\..\MelonLoader\net6\MelonLoader.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="0Harmony">
+      <HintPath>..\..\MelonLoader\net6\0Harmony.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Il2CppInterop.Runtime">
+      <HintPath>..\..\MelonLoader\net6\Il2CppInterop.Runtime.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Il2Cppmscorlib">
+      <HintPath>..\..\MelonLoader\Il2CppAssemblies\Il2Cppmscorlib.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Il2CppSystem">
+      <HintPath>..\..\MelonLoader\Il2CppAssemblies\Il2CppSystem.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Assembly-CSharp">
+      <HintPath>..\..\MelonLoader\Il2CppAssemblies\Assembly-CSharp.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="UnityEngine.CoreModule">
+      <HintPath>..\..\MelonLoader\Il2CppAssemblies\UnityEngine.CoreModule.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="UnityEngine.AudioModule">
+      <HintPath>..\..\MelonLoader\Il2CppAssemblies\UnityEngine.AudioModule.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="UnityEngine.UnityWebRequestModule">
+      <HintPath>..\..\MelonLoader\Il2CppAssemblies\UnityEngine.UnityWebRequestModule.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="UnityEngine.UnityWebRequestAudioModule">
+      <HintPath>..\..\MelonLoader\Il2CppAssemblies\UnityEngine.UnityWebRequestAudioModule.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="UnityEngine.UnityWebRequestWWWModule">
+      <HintPath>..\..\MelonLoader\Il2CppAssemblies\UnityEngine.UnityWebRequestWWWModule.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+  </ItemGroup>
+
+  <UsingTask TaskName="ReadModVersion" TaskFactory="RoslynCodeTaskFactory" AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll">
+    <ParameterGroup>
+      <SourceFile ParameterType="System.String" Required="true" />
+      <ModVersion ParameterType="System.String" Output="true" />
+    </ParameterGroup>
+    <Task>
+      <Using Namespace="System.IO" />
+      <Using Namespace="System.Text.RegularExpressions" />
+      <Code Type="Fragment" Language="cs">
+        <![CDATA[
+          string content = File.ReadAllText(SourceFile);
+          var match = Regex.Match(content, @"MelonInfo\(.*?,\s*""[^""]*""\s*,\s*""([^""]+)""");
+          if (match.Success) {
+              ModVersion = match.Groups[1].Value;
+          } else {
+              ModVersion = "1.0.0";
+          }
+        ]]>
+      </Code>
+    </Task>
+  </UsingTask>
+
+  <Target Name="PackageBuildOutput" AfterTargets="Build">
+    <ReadModVersion SourceFile="$(MSBuildProjectDirectory)\Main.cs">
+      <Output TaskParameter="ModVersion" PropertyName="ModVersion" />
+    </ReadModVersion>
+    <PropertyGroup>
+      <PackageZipPath>$(MSBuildProjectDirectory)\LongYinCustomBgm-v$(ModVersion).zip</PackageZipPath>
+    </PropertyGroup>
+    <ItemGroup>
+      <PackageUserDataFiles Include="$(MSBuildProjectDirectory)\PackageRoot\UserData\LongYinCustomBgm\**\*" />
+    </ItemGroup>
+    <RemoveDir Directories="$(PackageTempDir)" />
+    <MakeDir Directories="$(PackageTempDir)" />
+    <MakeDir Directories="$(PackageTempDir)\Mods" />
+    <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(PackageTempDir)\Mods" />
+    <Copy SourceFiles="$(MSBuildProjectDirectory)\README.md" DestinationFolder="$(PackageTempDir)" />
+    <Copy
+      SourceFiles="@(PackageUserDataFiles)"
+      DestinationFiles="@(PackageUserDataFiles->'$(PackageTempDir)\UserData\LongYinCustomBgm\%(RecursiveDir)%(Filename)%(Extension)')" />
+    <Delete Files="$(PackageZipPath)" Condition="Exists('$(PackageZipPath)')" />
+    <ZipDirectory SourceDirectory="$(PackageTempDir)" DestinationFile="$(PackageZipPath)" Overwrite="true" />
+    <RemoveDir Directories="$(PackageTempDir)" />
+    <Message Text="打包完成：$(PackageZipPath)" Importance="high" />
+  </Target>
+</Project>
