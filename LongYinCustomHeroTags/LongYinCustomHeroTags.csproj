@@ -71,7 +71,6 @@
     </PropertyGroup>
     <ItemGroup>
       <PackageFiles Include="$(TargetPath)" />
-      <PackageFiles Include="$(MSBuildProjectDirectory)\原版HeroTagData.csv" />
       <PackageFiles Include="$(MSBuildProjectDirectory)\README.txt" />
     </ItemGroup>
     <RemoveDir Directories="$(PackageTempDir)" />
