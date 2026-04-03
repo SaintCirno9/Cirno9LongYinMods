@@ -11,7 +11,7 @@ using Il2CppInterop.Runtime;
 using MelonLoader;
 using UnityEngine;
 
-[assembly: MelonInfo(typeof(LongYinCustomSpeHeroData.Main), "LongYinCustomSpeHeroData", "1.0.0", "SaintCirno9", null)]
+[assembly: MelonInfo(typeof(LongYinCustomSpeHeroData.Main), "LongYinCustomSpeHeroData", "1.1.0", "SaintCirno9", null)]
 [assembly: MelonGame("TppStudio", "LongYinLiZhiZhuan")]
 
 namespace LongYinCustomSpeHeroData
@@ -90,7 +90,6 @@ namespace LongYinCustomSpeHeroData
         private static DateTime _cachedSpeHeroConfigWriteTimeUtc = DateTime.MinValue;
         private static LoadedConfigData _cachedSpeHeroFaceConfig = LoadedConfigData.Empty;
         private static DateTime _cachedSpeHeroFaceConfigWriteTimeUtc = DateTime.MinValue;
-        private static readonly HashSet<int> _runtimeSpeHeroIds = new();
         private static bool _cachedEnableRecruitAllSpeHeroes = true;
         private static DateTime _cachedModConfigWriteTimeUtc = DateTime.MinValue;
         private static bool _exportedVanillaSpeHeroData;
@@ -521,77 +520,12 @@ namespace LongYinCustomSpeHeroData
             return ref _exportedVanillaSpeHeroFaceData;
         }
 
-        internal static void RefreshRuntimeSpeHeroIds(string csvText)
+        internal static bool ShouldForceRecruitForHero(HeroData targetHero)
         {
-            HashSet<int> latestHeroIds = ExtractHeroIdsFromCsvText(csvText);
-            _runtimeSpeHeroIds.Clear();
-
-            foreach (int heroId in latestHeroIds)
-            {
-                _runtimeSpeHeroIds.Add(heroId);
-            }
-        }
-
-        internal static bool ShouldForceRecruitForHero(int heroId)
-        {
-            if (heroId <= 0 || !IsRecruitAllSpeHeroesEnabled())
-            {
-                return false;
-            }
-
-            return _runtimeSpeHeroIds.Contains(heroId) || IsConfiguredSpeHeroId(heroId);
-        }
-
-        internal static bool IsConfiguredSpeHeroId(int heroId)
-        {
-            if (heroId <= 0)
-            {
-                return false;
-            }
-
-            LoadedConfigData configData = LoadSpeHeroConfig();
-            return configData.Valid && configData.HeroIds.Contains(heroId);
-        }
-
-        private static HashSet<int> ExtractHeroIdsFromCsvText(string csvText)
-        {
-            var heroIds = new HashSet<int>();
-            if (string.IsNullOrWhiteSpace(csvText))
-            {
-                return heroIds;
-            }
-
-            string[] lines = csvText.Replace("\uFEFF", "").Split(new[] { "\r\n", "\n" }, StringSplitOptions.None);
-            if (lines.Length <= 1)
-            {
-                return heroIds;
-            }
-
-            string[] headers = SplitCsvLine(lines[0]);
-            int idColumnIndex = FindColumnIndex(headers, "id");
-            if (idColumnIndex < 0)
-            {
-                LOG.Warning("运行时 SpeHeroData 缺少 id 列，无法建立特殊人物索引。");
-                return heroIds;
-            }
-
-            for (int i = 1; i < lines.Length; i++)
-            {
-                string line = lines[i].Trim();
-                if (string.IsNullOrWhiteSpace(line) || line.StartsWith('#'))
-                {
-                    continue;
-                }
-
-                string[] cells = SplitCsvLine(line);
-                string idText = GetCell(cells, idColumnIndex);
-                if (int.TryParse(idText, NumberStyles.Integer, CultureInfo.InvariantCulture, out int heroId) && heroId > 0)
-                {
-                    heroIds.Add(heroId);
-                }
-            }
-
-            return heroIds;
+            return targetHero != null &&
+                   IsRecruitAllSpeHeroesEnabled() &&
+                   targetHero.speHero &&
+                   !targetHero.recruitAble;
         }
 
         private static bool ValidateHeaders(string[] headers, string[] requiredHeaders, string path)
@@ -677,7 +611,6 @@ namespace LongYinCustomSpeHeroData
                     Main.ExportVanillaCsvIfNeeded(Main.VanillaSpeHeroExportPath, textAsset.text, ref Main.GetSpeHeroExportedFlagRef());
                     LoadedConfigData configData = Main.LoadSpeHeroConfig();
                     MergeResult mergeResult = Main.BuildMergedCsvText(textAsset.text, configData, "SpeHeroData");
-                    Main.RefreshRuntimeSpeHeroIds(mergeResult.Changed ? mergeResult.MergedText : textAsset.text);
                     if (!mergeResult.Changed)
                     {
                         return;
@@ -715,18 +648,29 @@ namespace LongYinCustomSpeHeroData
         }
     }
 
-    [HarmonyPatch(typeof(WorldData), nameof(WorldData.GetHero), [typeof(int)])]
-    public class WorldDataGetHeroPatch
+    [HarmonyPatch(typeof(HeroDetailController), nameof(HeroDetailController.FreshNowHeroDetail), new[] { typeof(HeroData), typeof(bool) })]
+    public class HeroDetailControllerFreshNowHeroDetailPatch
     {
-        [HarmonyPostfix]
-        public static void Postfix(ref HeroData __result, int heroID)
+        [HarmonyPrefix]
+        public static void Prefix(HeroData targetHero)
         {
-            if (__result != null)
+            if (Main.ShouldForceRecruitForHero(targetHero))
             {
-                if (Main.ShouldForceRecruitForHero(heroID) && !__result.recruitAble)
-                {
-                    __result.recruitAble = true;
-                }
+                targetHero.recruitAble = true;
+            }
+        }
+    }
+
+    [HarmonyPatch(typeof(PlotController), nameof(PlotController.AskHeroJoinForce), new[] { typeof(string) })]
+    public class PlotControllerAskHeroJoinForcePatch
+    {
+        [HarmonyPrefix]
+        public static void Prefix(PlotController __instance)
+        {
+            HeroData targetHero = __instance?.targetInteractHero;
+            if (Main.ShouldForceRecruitForHero(targetHero))
+            {
+                targetHero.recruitAble = true;
             }
         }
     }
