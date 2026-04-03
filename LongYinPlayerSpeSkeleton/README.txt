@@ -61,6 +61,11 @@
 12. `StaticImageHudAvatarOffsetX=15`
    - `StaticImageHudAvatarOffsetY=-70`
    - 左上角人物小头像静态图额外偏移。
+13. `StaticImageCardPortraitInsetRatio=0.9`
+   - 卡片内肖像静态图的缩放比例。
+14. `StaticImageCardPortraitOffsetX=-10`
+   - `StaticImageCardPortraitOffsetY=-20`
+   - 卡片内肖像静态图额外偏移。
 
 【注意事项】
 1. 如果当前还没捕获到 `GameData/SpeHeroData`，控制台会提示暂时无法按名字解析。
