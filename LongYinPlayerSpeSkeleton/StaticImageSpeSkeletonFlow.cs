@@ -15,6 +15,7 @@ namespace LongYinPlayerSpeSkeleton
     internal static class StaticImageSpeSkeletonFlow
     {
         private const string StaticPortraitObjectName = "PlayerSpeStaticPortrait";
+        private const string StaticPortraitContentObjectName = "Content";
 
         private static readonly HashSet<string> MissingImageWarnings = new(StringComparer.OrdinalIgnoreCase);
         private static string _cachedImagePath;
@@ -48,24 +49,34 @@ namespace LongYinPlayerSpeSkeleton
                 return false;
             }
 
-            Image portraitImage = GetOrCreatePortraitImage(targetSkeletonParent);
-            if (portraitImage == null)
+            Image portraitRootImage = GetOrCreatePortraitImage(targetSkeletonParent);
+            if (portraitRootImage == null)
             {
                 RestoreOriginalDisplay(targetSkeletonParent);
                 Main.Log.Warning($"静态图片模式创建 Image 失败：{Main.DescribeTransformContext(targetSkeletonParent)}");
                 return false;
             }
 
-            RectTransform portraitRect = portraitImage.transform.TryCast<RectTransform>();
+            RectTransform portraitRect = portraitRootImage.transform.TryCast<RectTransform>();
             CopyLayoutFromReference(targetSkeletonParent, portraitRect);
-            portraitImage.sprite = sprite;
-            portraitImage.preserveAspect = true;
-            portraitImage.raycastTarget = false;
-            portraitImage.color = Color.white;
-            portraitImage.enabled = true;
-            portraitImage.gameObject.SetActive(true);
 
-            SetOnlyStaticPortraitVisible(targetSkeletonParent, portraitImage.transform);
+            Image contentImage = GetOrCreateContentImage(portraitRootImage.transform);
+            if (contentImage == null)
+            {
+                RestoreOriginalDisplay(targetSkeletonParent);
+                Main.Log.Warning($"静态图片模式创建内容 Image 失败：{Main.DescribeTransformContext(targetSkeletonParent)}");
+                return false;
+            }
+
+            portraitRootImage.sprite = null;
+            portraitRootImage.color = new Color(1f, 1f, 1f, 0f);
+            portraitRootImage.raycastTarget = false;
+            portraitRootImage.enabled = false;
+            portraitRootImage.gameObject.SetActive(true);
+
+            ConfigureContentImage(targetSkeletonParent, portraitRect, contentImage, sprite);
+
+            SetOnlyStaticPortraitVisible(targetSkeletonParent, portraitRootImage.transform);
 
             if (Main.VerboseLog)
             {
@@ -238,6 +249,27 @@ namespace LongYinPlayerSpeSkeleton
             return portraitImage;
         }
 
+        private static Image GetOrCreateContentImage(Transform portraitRootTransform)
+        {
+            if (portraitRootTransform == null)
+            {
+                return null;
+            }
+
+            Transform existingTransform = portraitRootTransform.Find(StaticPortraitContentObjectName);
+            Image contentImage = existingTransform != null ? existingTransform.GetComponent<Image>() : null;
+            if (contentImage != null)
+            {
+                return contentImage;
+            }
+
+            var contentObject = new GameObject(StaticPortraitContentObjectName);
+            RectTransform contentRect = contentObject.AddComponent<RectTransform>();
+            contentRect.SetParent(portraitRootTransform, false);
+            contentImage = contentObject.AddComponent<Image>();
+            return contentImage;
+        }
+
         private static void SetOnlyStaticPortraitVisible(Transform targetSkeletonParent, Transform portraitTransform)
         {
             for (int i = 0; i < targetSkeletonParent.childCount; i++)
@@ -315,6 +347,140 @@ namespace LongYinPlayerSpeSkeleton
             portraitRect.anchoredPosition3D = Vector3.zero;
             portraitRect.localScale = Vector3.one;
             portraitRect.localRotation = Quaternion.identity;
+        }
+
+        /// <summary>
+        /// 外层容器沿用原节点布局，真正显示图片的子节点再按不同界面控制尺寸。
+        /// </summary>
+        private static void ConfigureContentImage(Transform targetSkeletonParent, RectTransform portraitRect, Image contentImage, Sprite sprite)
+        {
+            if (portraitRect == null || contentImage == null || sprite == null)
+            {
+                return;
+            }
+
+            RectTransform contentRect = contentImage.transform.TryCast<RectTransform>();
+            if (contentRect == null)
+            {
+                return;
+            }
+
+            contentImage.sprite = sprite;
+            contentImage.raycastTarget = false;
+            contentImage.color = Color.white;
+            contentImage.enabled = true;
+
+            if (IsHeroDetailContext(targetSkeletonParent))
+            {
+                EnsureRootMask(portraitRect, enabled: true);
+                contentImage.preserveAspect = false;
+                ApplyHeroDetailContentSize(portraitRect, contentRect, sprite);
+                return;
+            }
+
+            if (Main.IsCharacterCreationContext(targetSkeletonParent))
+            {
+                EnsureRootMask(portraitRect, enabled: false);
+                contentImage.preserveAspect = false;
+                ApplyCharacterCreationContentSize(portraitRect, contentRect, sprite);
+                return;
+            }
+
+            EnsureRootMask(portraitRect, enabled: false);
+            contentImage.preserveAspect = true;
+            contentRect.anchorMin = Vector2.zero;
+            contentRect.anchorMax = Vector2.one;
+            contentRect.pivot = new Vector2(0.5f, 0.5f);
+            contentRect.offsetMin = Vector2.zero;
+            contentRect.offsetMax = Vector2.zero;
+            contentRect.anchoredPosition3D = Vector3.zero;
+            contentRect.localScale = Vector3.one;
+            contentRect.localRotation = Quaternion.identity;
+        }
+
+        private static void ApplyHeroDetailContentSize(RectTransform portraitRect, RectTransform contentRect, Sprite sprite)
+        {
+            if (portraitRect == null || contentRect == null || sprite == null)
+            {
+                return;
+            }
+
+            StaticImageSceneConfig sceneConfig = Main.HeroDetailStaticImageConfig;
+            float frameWidth = Mathf.Max(1f, Mathf.Abs(portraitRect.rect.width));
+            float frameHeight = Mathf.Max(1f, Mathf.Abs(portraitRect.rect.height));
+            float spriteWidth = Mathf.Max(1f, sprite.rect.width);
+            float spriteHeight = Mathf.Max(1f, sprite.rect.height);
+            float coverScale = Mathf.Max(frameWidth / spriteWidth, frameHeight / spriteHeight);
+            Vector2 coveredSize = new Vector2(spriteWidth * coverScale, spriteHeight * coverScale) * sceneConfig.InsetRatio;
+
+            // 详情页立绘更适合保留头部区域，所以改为顶部居中裁切。
+            contentRect.anchorMin = new Vector2(0.5f, 1f);
+            contentRect.anchorMax = new Vector2(0.5f, 1f);
+            contentRect.pivot = new Vector2(0.5f, 1f);
+            contentRect.sizeDelta = coveredSize;
+            contentRect.anchoredPosition3D = sceneConfig.OffsetVector3;
+            contentRect.localScale = Vector3.one;
+            contentRect.localRotation = Quaternion.identity;
+        }
+
+        private static void ApplyCharacterCreationContentSize(RectTransform portraitRect, RectTransform contentRect, Sprite sprite)
+        {
+            if (portraitRect == null || contentRect == null || sprite == null)
+            {
+                return;
+            }
+
+            StaticImageSceneConfig sceneConfig = Main.CharacterCreationStaticImageConfig;
+            float insetRatio = sceneConfig.InsetRatio;
+            float frameWidth = Mathf.Max(1f, Mathf.Abs(portraitRect.rect.width));
+            float frameHeight = Mathf.Max(1f, Mathf.Abs(portraitRect.rect.height));
+            float availableWidth = frameWidth * insetRatio;
+            float availableHeight = frameHeight * insetRatio;
+            float spriteWidth = Mathf.Max(1f, sprite.rect.width);
+            float spriteHeight = Mathf.Max(1f, sprite.rect.height);
+            float fitScale = Mathf.Min(availableWidth / spriteWidth, availableHeight / spriteHeight);
+            Vector2 fittedSize = new Vector2(spriteWidth * fitScale, spriteHeight * fitScale);
+
+            contentRect.anchorMin = new Vector2(0.5f, 0.5f);
+            contentRect.anchorMax = new Vector2(0.5f, 0.5f);
+            contentRect.pivot = new Vector2(0.5f, 0.5f);
+            contentRect.sizeDelta = fittedSize;
+            contentRect.anchoredPosition3D = sceneConfig.OffsetVector3;
+            contentRect.localScale = Vector3.one;
+            contentRect.localRotation = Quaternion.identity;
+        }
+
+        private static void EnsureRootMask(RectTransform portraitRect, bool enabled)
+        {
+            if (portraitRect == null)
+            {
+                return;
+            }
+
+            RectMask2D mask = portraitRect.GetComponent<RectMask2D>();
+            if (enabled)
+            {
+                if (mask == null)
+                {
+                    mask = portraitRect.gameObject.AddComponent<RectMask2D>();
+                }
+
+                mask.enabled = true;
+                return;
+            }
+
+            if (mask != null)
+            {
+                mask.enabled = false;
+            }
+        }
+
+        private static bool IsHeroDetailContext(Transform targetSkeletonParent)
+        {
+            return targetSkeletonParent != null &&
+                   string.Equals(targetSkeletonParent.gameObject.name, "Face", StringComparison.Ordinal) &&
+                   targetSkeletonParent.parent != null &&
+                   string.Equals(targetSkeletonParent.parent.gameObject.name, "HeroDetailPanel", StringComparison.Ordinal);
         }
     }
 }

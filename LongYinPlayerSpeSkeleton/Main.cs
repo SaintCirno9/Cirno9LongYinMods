@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
-using System.IO;
 using System.Reflection;
 using System.Text;
 using HarmonyLib;
@@ -54,81 +53,16 @@ namespace LongYinPlayerSpeSkeleton
 
         private const string SpeHeroResourcePath = "GameData/SpeHeroData";
 
-        internal static readonly string ConfigDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "UserData", "LongYinPlayerSpeSkeleton");
-        internal static readonly string ConfigPath = Path.Combine(ConfigDir, "LongYinPlayerSpeSkeleton.cfg");
-        private const string ConfigPathDisplay = "UserData\\LongYinPlayerSpeSkeleton\\LongYinPlayerSpeSkeleton.cfg";
-
         private static readonly HashSet<string> SpeHeroResolutionWarnings = new(StringComparer.Ordinal);
         private const string CharacterCreationToggleButtonName = "LongYinPlayerSpeSkeleton_CharacterCreationToggle";
         private const string HudToggleButtonName = "LongYinPlayerSpeSkeleton_HudToggle";
 
-        private static bool _enabled = true;
-        private static string _playerSpeHeroName = string.Empty;
-        private static bool _replaceInCharacterCreation = true;
-        private static PlayerSkeletonRenderMode _renderMode = PlayerSkeletonRenderMode.Skeleton;
-        private static string _staticImagePath = @"Portraits\白云天.png";
-        private static bool _verboseLog;
-        private static DateTime _configLastWriteTimeUtc = DateTime.MinValue;
         private static string _cachedSpeHeroCsvText = string.Empty;
         private static Dictionary<string, SpeHeroLookupEntry> _cachedSpeHeroByName = new(StringComparer.OrdinalIgnoreCase);
         private static SpeHeroLookupEntry _resolvedSpeHeroEntry;
         private static string _resolvedSpeHeroReason = "尚未解析 PlayerSpeHeroName。";
 
         internal static MelonLogger.Instance Log => Melon<Main>.Logger;
-
-        internal static bool Enabled
-        {
-            get
-            {
-                EnsureConfigLoaded();
-                return _enabled;
-            }
-        }
-
-        internal static string PlayerSpeHeroName
-        {
-            get
-            {
-                EnsureConfigLoaded();
-                return _playerSpeHeroName ?? string.Empty;
-            }
-        }
-
-        internal static bool VerboseLog
-        {
-            get
-            {
-                EnsureConfigLoaded();
-                return _verboseLog;
-            }
-        }
-
-        internal static bool ReplaceInCharacterCreation
-        {
-            get
-            {
-                EnsureConfigLoaded();
-                return _replaceInCharacterCreation;
-            }
-        }
-
-        internal static PlayerSkeletonRenderMode RenderMode
-        {
-            get
-            {
-                EnsureConfigLoaded();
-                return _renderMode;
-            }
-        }
-
-        internal static string StaticImagePath
-        {
-            get
-            {
-                EnsureConfigLoaded();
-                return _staticImagePath ?? string.Empty;
-            }
-        }
 
         public override void OnInitializeMelon()
         {
@@ -178,214 +112,12 @@ namespace LongYinPlayerSpeSkeleton
                 return "ReplaceInCharacterCreation=false，当前处于创建人物界面。";
             }
 
+            if (RenderMode == PlayerSkeletonRenderMode.StaticImage)
+            {
+                return null;
+            }
+
             return TryResolveConfiguredSpeHero(out _, out string reason) ? null : reason;
-        }
-
-        internal static void EnsureConfigLoaded()
-        {
-            try
-            {
-                EnsureConfigExists();
-                DateTime lastWriteTimeUtc = File.Exists(ConfigPath) ? File.GetLastWriteTimeUtc(ConfigPath) : DateTime.MinValue;
-                if (lastWriteTimeUtc != _configLastWriteTimeUtc)
-                {
-                    ReloadConfig(forceLog: false);
-                }
-            }
-            catch (Exception ex)
-            {
-                Log.Warning($"检查配置文件失败：{ex.GetType().Name} - {ex.Message}");
-            }
-        }
-
-        internal static void EnsureConfigExists()
-        {
-            Directory.CreateDirectory(ConfigDir);
-            if (!File.Exists(ConfigPath))
-            {
-                File.WriteAllText(
-                    ConfigPath,
-                    string.Join(
-                        Environment.NewLine,
-                        new[]
-                        {
-                            "# LongYinPlayerSpeSkeleton 独立配置文件",
-                            "# Enabled: 是否启用玩家特殊立绘替换",
-                            "# PlayerSpeHeroName: 玩家要借用的特殊人物名字，必须能在 GameData/SpeHeroData 中找到，且“特殊skeleton”=1",
-                            "# RenderMode: Skeleton=沿用当前原版托管链路，StaticImage=改为加载静态图片",
-                            "# StaticImagePath: 静态图片路径，可写绝对路径，也可写相对 UserData\\LongYinPlayerSpeSkeleton 的路径",
-                            "# VerboseLog: 是否输出详细日志",
-                            "Enabled=true",
-                            "PlayerSpeHeroName=白云天",
-                            "RenderMode=Skeleton",
-                            @"StaticImagePath=Portraits\白云天.png",
-                            "VerboseLog=false",
-                            string.Empty
-                        }),
-                    new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
-            }
-
-            EnsureConfigKeyExists(
-                "RenderMode",
-                new[]
-                {
-                    "# RenderMode: Skeleton=沿用当前原版托管链路，StaticImage=改为加载静态图片",
-                    "RenderMode=Skeleton"
-                });
-            EnsureConfigKeyExists(
-                "StaticImagePath",
-                new[]
-                {
-                    "# StaticImagePath: 静态图片路径，可写绝对路径，也可写相对 UserData\\LongYinPlayerSpeSkeleton 的路径",
-                    @"StaticImagePath=Portraits\白云天.png"
-                });
-            RemoveConfigKey("ReplaceInCharacterCreation");
-        }
-
-        private static void EnsureConfigKeyExists(string key, string[] defaultLines)
-        {
-            if (!File.Exists(ConfigPath))
-            {
-                return;
-            }
-
-            string[] lines = File.ReadAllLines(ConfigPath);
-            for (int i = 0; i < lines.Length; i++)
-            {
-                string trimmedLine = lines[i].Trim();
-                if (!trimmedLine.StartsWith(key + "=", StringComparison.OrdinalIgnoreCase))
-                {
-                    continue;
-                }
-
-                return;
-            }
-
-            var mergedLines = new List<string>(lines);
-            if (mergedLines.Count > 0 && mergedLines[^1].Length != 0)
-            {
-                mergedLines.Add(string.Empty);
-            }
-
-            mergedLines.AddRange(defaultLines);
-            mergedLines.Add(string.Empty);
-            File.WriteAllLines(ConfigPath, mergedLines, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
-        }
-
-        private static void RemoveConfigKey(string key)
-        {
-            if (!File.Exists(ConfigPath))
-            {
-                return;
-            }
-
-            string[] lines = File.ReadAllLines(ConfigPath);
-            var keptLines = new List<string>(lines.Length);
-            for (int i = 0; i < lines.Length; i++)
-            {
-                string trimmedLine = lines[i].Trim();
-                if (trimmedLine.StartsWith("# " + key + ":", StringComparison.OrdinalIgnoreCase) ||
-                    trimmedLine.StartsWith(key + "=", StringComparison.OrdinalIgnoreCase))
-                {
-                    continue;
-                }
-
-                keptLines.Add(lines[i]);
-            }
-
-            if (keptLines.Count != lines.Length)
-            {
-                File.WriteAllLines(ConfigPath, keptLines, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
-            }
-        }
-
-        private static void ReloadConfig(bool forceLog)
-        {
-            bool enabled = true;
-            string playerSpeHeroName = string.Empty;
-            PlayerSkeletonRenderMode renderMode = PlayerSkeletonRenderMode.Skeleton;
-            string staticImagePath = @"Portraits\白云天.png";
-            bool verboseLog = false;
-
-            foreach (string rawLine in File.ReadAllLines(ConfigPath))
-            {
-                string line = rawLine.Trim();
-                if (line.Length == 0 || line.StartsWith("#", StringComparison.Ordinal))
-                {
-                    continue;
-                }
-
-                int separatorIndex = line.IndexOf('=');
-                if (separatorIndex <= 0)
-                {
-                    continue;
-                }
-
-                string key = line.Substring(0, separatorIndex).Trim();
-                string value = line[(separatorIndex + 1)..].Trim();
-
-                if (key.Equals("Enabled", StringComparison.OrdinalIgnoreCase))
-                {
-                    if (bool.TryParse(value, out bool parsedEnabled))
-                    {
-                        enabled = parsedEnabled;
-                    }
-                }
-                else if (key.Equals("PlayerSpeHeroName", StringComparison.OrdinalIgnoreCase))
-                {
-                    playerSpeHeroName = value.Trim();
-                }
-                else if (key.Equals("RenderMode", StringComparison.OrdinalIgnoreCase))
-                {
-                    renderMode = ParseRenderMode(value);
-                }
-                else if (key.Equals("StaticImagePath", StringComparison.OrdinalIgnoreCase))
-                {
-                    staticImagePath = value;
-                }
-                else if (key.Equals("VerboseLog", StringComparison.OrdinalIgnoreCase))
-                {
-                    if (bool.TryParse(value, out bool parsedVerboseLog))
-                    {
-                        verboseLog = parsedVerboseLog;
-                    }
-                }
-            }
-
-            _enabled = enabled;
-            _playerSpeHeroName = playerSpeHeroName;
-            _renderMode = renderMode;
-            _staticImagePath = staticImagePath;
-            _verboseLog = verboseLog;
-            _configLastWriteTimeUtc = File.GetLastWriteTimeUtc(ConfigPath);
-            SpeHeroResolutionWarnings.Clear();
-            RefreshResolvedSpeHero();
-            StaticImageSpeSkeletonFlow.NotifyConfigReloaded();
-
-            if (forceLog || _verboseLog)
-            {
-                Log.Msg(
-                    System.ConsoleColor.Cyan,
-                    $"已读取配置：Enabled={_enabled}, PlayerSpeHeroName={(_playerSpeHeroName.Length == 0 ? "<空>" : _playerSpeHeroName)}, RenderMode={_renderMode}, StaticImagePath={(_staticImagePath.Length == 0 ? "<空>" : _staticImagePath)}, VerboseLog={_verboseLog}");
-            }
-        }
-
-        private static PlayerSkeletonRenderMode ParseRenderMode(string value)
-        {
-            if (string.IsNullOrWhiteSpace(value))
-            {
-                return PlayerSkeletonRenderMode.Skeleton;
-            }
-
-            string normalizedValue = value.Trim();
-            if (normalizedValue.Equals("StaticImage", StringComparison.OrdinalIgnoreCase) ||
-                normalizedValue.Equals("Image", StringComparison.OrdinalIgnoreCase) ||
-                normalizedValue.Equals("Static", StringComparison.OrdinalIgnoreCase))
-            {
-                return PlayerSkeletonRenderMode.StaticImage;
-            }
-
-            return PlayerSkeletonRenderMode.Skeleton;
         }
 
         internal static void SetEnabledFromUi(bool enabled)
@@ -398,39 +130,6 @@ namespace LongYinPlayerSpeSkeleton
         {
             _replaceInCharacterCreation = enabled;
             RefreshAfterUiToggle();
-        }
-
-        private static void SetBoolConfigValue(string key, bool value)
-        {
-            EnsureConfigExists();
-
-            string[] lines = File.ReadAllLines(ConfigPath);
-            bool replaced = false;
-            for (int i = 0; i < lines.Length; i++)
-            {
-                string trimmedLine = lines[i].Trim();
-                if (trimmedLine.StartsWith(key + "=", StringComparison.OrdinalIgnoreCase))
-                {
-                    lines[i] = $"{key}={value.ToString().ToLowerInvariant()}";
-                    replaced = true;
-                    break;
-                }
-            }
-
-            if (!replaced)
-            {
-                var mergedLines = new List<string>(lines);
-                if (mergedLines.Count > 0 && mergedLines[^1].Length != 0)
-                {
-                    mergedLines.Add(string.Empty);
-                }
-
-                mergedLines.Add($"{key}={value.ToString().ToLowerInvariant()}");
-                lines = mergedLines.ToArray();
-            }
-
-            File.WriteAllLines(ConfigPath, lines, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
-            ReloadConfig(forceLog: true);
         }
 
         private static void RefreshAfterUiToggle()
