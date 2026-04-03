@@ -13,7 +13,7 @@ using UnityEngine;
 using UnityEngine.Events;
 using UnityEngine.UI;
 
-[assembly: MelonInfo(typeof(LongYinPlayerSpeSkeleton.Main), "LongYinPlayerSpeSkeleton", "1.1.0", "OpenAI", null)]
+[assembly: MelonInfo(typeof(LongYinPlayerSpeSkeleton.Main), "LongYinPlayerSpeSkeleton", "1.1.1", "SaintCirno9", null)]
 [assembly: MelonGame("TppStudio", "LongYinLiZhiZhuan")]
 
 namespace LongYinPlayerSpeSkeleton
@@ -126,8 +126,18 @@ namespace LongYinPlayerSpeSkeleton
             RefreshAfterUiToggle();
         }
 
+        internal static bool IsCharacterCreationReplacementActive()
+        {
+            return Enabled && ReplaceInCharacterCreation;
+        }
+
         internal static void SetReplaceInCharacterCreationFromUi(bool enabled)
         {
+            if (enabled && !Enabled)
+            {
+                SetBoolConfigValue("Enabled", true);
+            }
+
             _replaceInCharacterCreation = enabled;
             RefreshAfterUiToggle();
         }
@@ -579,7 +589,7 @@ namespace LongYinPlayerSpeSkeleton
                     parentRect,
                     templateText,
                     new Vector2(220f, 32f),
-                    () => SetReplaceInCharacterCreationFromUi(!ReplaceInCharacterCreation));
+                    () => SetReplaceInCharacterCreationFromUi(!IsCharacterCreationReplacementActive()));
                 if (buttonObject == null)
                 {
                     return;
@@ -605,7 +615,7 @@ namespace LongYinPlayerSpeSkeleton
                 return;
             }
 
-            UpdateCheckboxButtonVisual(buttonTransform, "特殊立绘", ReplaceInCharacterCreation);
+            UpdateCheckboxButtonVisual(buttonTransform, "特殊立绘", IsCharacterCreationReplacementActive());
         }
 
         internal static void EnsureHudToggleButton(HudController controller)
