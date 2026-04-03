@@ -34,12 +34,14 @@ namespace LongYinPlayerSpeSkeleton
     {
         private const string HeroDetailStaticImageKeyPrefix = "StaticImageHeroDetail";
         private const string CharacterCreationStaticImageKeyPrefix = "StaticImageCharacterCreation";
+        private const string HudAvatarStaticImageKeyPrefix = "StaticImageHudAvatar";
         internal static readonly string ConfigDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "UserData", "LongYinPlayerSpeSkeleton");
         internal static readonly string ConfigPath = Path.Combine(ConfigDir, "LongYinPlayerSpeSkeleton.cfg");
         internal static readonly string PortraitsDir = Path.Combine(ConfigDir, "Portraits");
         private const string ConfigPathDisplay = "UserData\\LongYinPlayerSpeSkeleton\\LongYinPlayerSpeSkeleton.cfg";
         private static readonly StaticImageSceneConfig DefaultHeroDetailStaticImageConfig = new(1f, 0f, -90f);
         private static readonly StaticImageSceneConfig DefaultCharacterCreationStaticImageConfig = new(1f, 0f, -60f);
+        private static readonly StaticImageSceneConfig DefaultHudAvatarStaticImageConfig = new(0.8f, 15f, -70f);
 
         private static bool _enabled = true;
         private static string _playerSpeHeroName = string.Empty;
@@ -48,6 +50,7 @@ namespace LongYinPlayerSpeSkeleton
         private static string _staticImagePath = @"Portraits\白云天.png";
         private static StaticImageSceneConfig _heroDetailStaticImageConfig = DefaultHeroDetailStaticImageConfig;
         private static StaticImageSceneConfig _characterCreationStaticImageConfig = DefaultCharacterCreationStaticImageConfig;
+        private static StaticImageSceneConfig _hudAvatarStaticImageConfig = DefaultHudAvatarStaticImageConfig;
         private static bool _verboseLog;
         private static DateTime _configLastWriteTimeUtc = DateTime.MinValue;
 
@@ -123,6 +126,15 @@ namespace LongYinPlayerSpeSkeleton
             }
         }
 
+        internal static StaticImageSceneConfig HudAvatarStaticImageConfig
+        {
+            get
+            {
+                EnsureConfigLoaded();
+                return _hudAvatarStaticImageConfig;
+            }
+        }
+
         internal static void EnsureConfigLoaded()
         {
             try
@@ -168,6 +180,7 @@ namespace LongYinPlayerSpeSkeleton
                 });
             EnsureStaticImageSceneConfigKeys(HeroDetailStaticImageKeyPrefix, "人物详情界面", "1.0 表示按当前裁切框完整 cover", DefaultHeroDetailStaticImageConfig);
             EnsureStaticImageSceneConfigKeys(CharacterCreationStaticImageKeyPrefix, "创建人物界面", "1.0 表示按边框完整 fit", DefaultCharacterCreationStaticImageConfig);
+            EnsureStaticImageSceneConfigKeys(HudAvatarStaticImageKeyPrefix, "左上角头像界面", "1.0 表示按头像框完整 cover", DefaultHudAvatarStaticImageConfig);
             RemoveConfigKey("ReplaceInCharacterCreation");
             RemoveConfigKey("StaticImageHeroDetailOverflowBias");
         }
@@ -192,8 +205,9 @@ namespace LongYinPlayerSpeSkeleton
                 string.Empty
             };
 
-            lines.AddRange(BuildStaticImageSceneConfigLines(HeroDetailStaticImageKeyPrefix, "人物详情界面", DefaultHeroDetailStaticImageConfig));
-            lines.AddRange(BuildStaticImageSceneConfigLines(CharacterCreationStaticImageKeyPrefix, "创建人物界面", DefaultCharacterCreationStaticImageConfig));
+            lines.AddRange(BuildStaticImageSceneConfigLines(HeroDetailStaticImageKeyPrefix, "人物详情界面", "1.0 表示按当前裁切框完整 cover", DefaultHeroDetailStaticImageConfig));
+            lines.AddRange(BuildStaticImageSceneConfigLines(CharacterCreationStaticImageKeyPrefix, "创建人物界面", "1.0 表示按边框完整 fit", DefaultCharacterCreationStaticImageConfig));
+            lines.AddRange(BuildStaticImageSceneConfigLines(HudAvatarStaticImageKeyPrefix, "左上角头像界面", "1.0 表示按头像框完整 cover", DefaultHudAvatarStaticImageConfig));
             lines.AddRange(
                 new[]
                 {
@@ -205,11 +219,11 @@ namespace LongYinPlayerSpeSkeleton
             return lines;
         }
 
-        private static IEnumerable<string> BuildStaticImageSceneConfigLines(string keyPrefix, string sceneLabel, StaticImageSceneConfig defaultConfig)
+        private static IEnumerable<string> BuildStaticImageSceneConfigLines(string keyPrefix, string sceneLabel, string insetDescription, StaticImageSceneConfig defaultConfig)
         {
             return new[]
             {
-                $"# {keyPrefix}InsetRatio: {sceneLabel}静态图缩放比例",
+                $"# {keyPrefix}InsetRatio: {sceneLabel}静态图缩放比例，{insetDescription}",
                 $"{keyPrefix}InsetRatio={FormatFloatForConfig(defaultConfig.InsetRatio)}",
                 string.Empty,
                 $"# {keyPrefix}OffsetX / {keyPrefix}OffsetY: {sceneLabel}静态图额外偏移",
@@ -364,6 +378,7 @@ namespace LongYinPlayerSpeSkeleton
             string staticImagePath = @"Portraits\白云天.png";
             StaticImageSceneConfig heroDetailConfig = DefaultHeroDetailStaticImageConfig;
             StaticImageSceneConfig characterCreationConfig = DefaultCharacterCreationStaticImageConfig;
+            StaticImageSceneConfig hudAvatarConfig = DefaultHudAvatarStaticImageConfig;
             bool verboseLog = false;
 
             foreach (string rawLine in File.ReadAllLines(ConfigPath))
@@ -408,6 +423,9 @@ namespace LongYinPlayerSpeSkeleton
                 else if (TryApplyStaticImageSceneConfigValue(ref characterCreationConfig, CharacterCreationStaticImageKeyPrefix, key, value))
                 {
                 }
+                else if (TryApplyStaticImageSceneConfigValue(ref hudAvatarConfig, HudAvatarStaticImageKeyPrefix, key, value))
+                {
+                }
                 else if (key.Equals("VerboseLog", StringComparison.OrdinalIgnoreCase))
                 {
                     if (bool.TryParse(value, out bool parsedVerboseLog))
@@ -423,6 +441,7 @@ namespace LongYinPlayerSpeSkeleton
             _staticImagePath = staticImagePath;
             _heroDetailStaticImageConfig = ClampStaticImageSceneConfig(heroDetailConfig);
             _characterCreationStaticImageConfig = ClampStaticImageSceneConfig(characterCreationConfig);
+            _hudAvatarStaticImageConfig = ClampStaticImageSceneConfig(hudAvatarConfig);
             _verboseLog = verboseLog;
             _configLastWriteTimeUtc = File.GetLastWriteTimeUtc(ConfigPath);
             SpeHeroResolutionWarnings.Clear();
@@ -433,7 +452,7 @@ namespace LongYinPlayerSpeSkeleton
             {
                 Log.Msg(
                     System.ConsoleColor.Cyan,
-                    $"已读取配置：Enabled={_enabled}, PlayerSpeHeroName={(_playerSpeHeroName.Length == 0 ? "<空>" : _playerSpeHeroName)}, RenderMode={(int)_renderMode}, StaticImagePath={(_staticImagePath.Length == 0 ? "<空>" : _staticImagePath)}, HeroDetail={_heroDetailStaticImageConfig}, CharacterCreation={_characterCreationStaticImageConfig}, VerboseLog={_verboseLog}");
+                    $"已读取配置：Enabled={_enabled}, PlayerSpeHeroName={(_playerSpeHeroName.Length == 0 ? "<空>" : _playerSpeHeroName)}, RenderMode={(int)_renderMode}, StaticImagePath={(_staticImagePath.Length == 0 ? "<空>" : _staticImagePath)}, HeroDetail={_heroDetailStaticImageConfig}, CharacterCreation={_characterCreationStaticImageConfig}, HudAvatar={_hudAvatarStaticImageConfig}, VerboseLog={_verboseLog}");
             }
         }
 

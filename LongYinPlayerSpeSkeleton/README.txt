@@ -56,6 +56,11 @@
 10. `StaticImageCharacterCreationOffsetX=0`
    - `StaticImageCharacterCreationOffsetY=-60`
    - 创建人物界面静态图额外偏移。
+11. `StaticImageHudAvatarInsetRatio=0.8`
+   - 左上角人物小头像静态图的缩放比例。
+12. `StaticImageHudAvatarOffsetX=15`
+   - `StaticImageHudAvatarOffsetY=-70`
+   - 左上角人物小头像静态图额外偏移。
 
 【注意事项】
 1. 如果当前还没捕获到 `GameData/SpeHeroData`，控制台会提示暂时无法按名字解析。

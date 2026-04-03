@@ -386,6 +386,14 @@ namespace LongYinPlayerSpeSkeleton
                 return;
             }
 
+            if (IsHudAvatarContext(targetSkeletonParent))
+            {
+                EnsureRootMask(portraitRect, enabled: true);
+                contentImage.preserveAspect = false;
+                ApplyHudAvatarContentSize(portraitRect, contentRect, sprite);
+                return;
+            }
+
             EnsureRootMask(portraitRect, enabled: false);
             contentImage.preserveAspect = true;
             contentRect.anchorMin = Vector2.zero;
@@ -450,6 +458,30 @@ namespace LongYinPlayerSpeSkeleton
             contentRect.localRotation = Quaternion.identity;
         }
 
+        private static void ApplyHudAvatarContentSize(RectTransform portraitRect, RectTransform contentRect, Sprite sprite)
+        {
+            if (portraitRect == null || contentRect == null || sprite == null)
+            {
+                return;
+            }
+
+            StaticImageSceneConfig sceneConfig = Main.HudAvatarStaticImageConfig;
+            float frameWidth = Mathf.Max(1f, Mathf.Abs(portraitRect.rect.width));
+            float frameHeight = Mathf.Max(1f, Mathf.Abs(portraitRect.rect.height));
+            float spriteWidth = Mathf.Max(1f, sprite.rect.width);
+            float spriteHeight = Mathf.Max(1f, sprite.rect.height);
+            float coverScale = Mathf.Max(frameWidth / spriteWidth, frameHeight / spriteHeight);
+            Vector2 coveredSize = new Vector2(spriteWidth * coverScale, spriteHeight * coverScale) * sceneConfig.InsetRatio;
+
+            contentRect.anchorMin = new Vector2(0.5f, 0.5f);
+            contentRect.anchorMax = new Vector2(0.5f, 0.5f);
+            contentRect.pivot = new Vector2(0.5f, 0.5f);
+            contentRect.sizeDelta = coveredSize;
+            contentRect.anchoredPosition3D = sceneConfig.OffsetVector3;
+            contentRect.localScale = Vector3.one;
+            contentRect.localRotation = Quaternion.identity;
+        }
+
         private static void EnsureRootMask(RectTransform portraitRect, bool enabled)
         {
             if (portraitRect == null)
@@ -481,6 +513,16 @@ namespace LongYinPlayerSpeSkeleton
                    string.Equals(targetSkeletonParent.gameObject.name, "Face", StringComparison.Ordinal) &&
                    targetSkeletonParent.parent != null &&
                    string.Equals(targetSkeletonParent.parent.gameObject.name, "HeroDetailPanel", StringComparison.Ordinal);
+        }
+
+        private static bool IsHudAvatarContext(Transform targetSkeletonParent)
+        {
+            return targetSkeletonParent != null &&
+                   string.Equals(targetSkeletonParent.gameObject.name, "Face", StringComparison.Ordinal) &&
+                   targetSkeletonParent.parent != null &&
+                   string.Equals(targetSkeletonParent.parent.gameObject.name, "FaceMask", StringComparison.Ordinal) &&
+                   targetSkeletonParent.parent.parent != null &&
+                   string.Equals(targetSkeletonParent.parent.parent.gameObject.name, "HudPanel", StringComparison.Ordinal);
         }
     }
 }
