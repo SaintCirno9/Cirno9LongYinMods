@@ -10,14 +10,8 @@
 
 ## 安装
 1. 确保游戏已安装MelonLoader
-2. 将编译后的`LongYinGameplayTweaks.dll`放置在`Mods`文件夹中
+2. 将`LongYinGameplayTweaks.dll`放置在`Mods`文件夹中
 3. 启动游戏
-
-## 构建
-使用.NET 6.0构建项目：
-```
-dotnet build
-```
 
 ## 注意
 此 mod 仍在开发中，后续可以继续按具体玩法拆分为更细的独立模块。

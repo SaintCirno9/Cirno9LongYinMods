@@ -12,7 +12,7 @@
 
 【安装说明】
 1. 本 Mod 依赖 MelonLoader。
-2. 将编译得到的 `LongYinPlayerSpeSkeleton.dll` 放进游戏根目录的 `Mods` 文件夹。
+2. 将 `LongYinPlayerSpeSkeleton.dll` 放进游戏根目录的 `Mods` 文件夹。
 
 【使用方法】
 1. 首次启动游戏后，Mod 会自动生成独立配置文件：

@@ -12,7 +12,3 @@ NoGenderLimit
 - 好感度至少 50
 - 目标未入狱
 - 目标未隐藏
-
-构建说明
-- 直接执行 dotnet build NoGenderLimit.csproj 即可。
-- 构建后会自动生成 DLL，并在项目目录输出带版本号的 zip 包。
