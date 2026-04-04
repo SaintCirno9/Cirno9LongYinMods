@@ -3,15 +3,15 @@
     <TargetFramework>net6.0</TargetFramework>
     <LangVersion>latest</LangVersion>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <AssemblyName>LongYinCustomClothData</AssemblyName>
-    <RootNamespace>LongYinCustomClothData</RootNamespace>
+    <AssemblyName>CustomClothData</AssemblyName>
+    <RootNamespace>CustomClothData</RootNamespace>
     <OutputPath>..\\</OutputPath>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <DebugType>none</DebugType>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
     <GenerateDependencyFile>false</GenerateDependencyFile>
     <PackageTempDir>$(BaseIntermediateOutputPath)package\\</PackageTempDir>
-    <PackageZipPath>$(MSBuildProjectDirectory)\\LongYinCustomClothData.zip</PackageZipPath>
+    <PackageZipPath>$(MSBuildProjectDirectory)\\CustomClothData.zip</PackageZipPath>
   </PropertyGroup>
 
   <PropertyGroup>
@@ -73,7 +73,7 @@
       <Output TaskParameter="ModVersion" PropertyName="ModVersion" />
     </ReadModVersion>
     <PropertyGroup>
-      <PackageZipPath>$(MSBuildProjectDirectory)\\LongYinCustomClothData-v$(ModVersion).zip</PackageZipPath>
+      <PackageZipPath>$(MSBuildProjectDirectory)\\CustomClothData-v$(ModVersion).zip</PackageZipPath>
     </PropertyGroup>
     <ItemGroup>
       <PackageFiles Include="$(TargetPath)" />

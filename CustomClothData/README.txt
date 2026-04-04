@@ -1,4 +1,4 @@
-《龙胤立志传》服装数据自定义 Mod（LongYinCustomClothData）
+《龙胤立志传》服装数据自定义 Mod（CustomClothData）
 
 【功能】
 1. 直接拦截并注入游戏资源 `GameData/SkinDataBase`。
@@ -7,13 +7,13 @@
 
 【安装】
 1. 确保游戏已经安装 MelonLoader。
-2. 将 `LongYinCustomClothData.dll` 放到游戏根目录的 `Mods` 文件夹。
+2. 将 `CustomClothData.dll` 放到游戏根目录的 `Mods` 文件夹。
 
 【配置】
-1. 第一次启动游戏后，Mod 会在游戏根目录生成 `UserData\LongYinCustomClothData\SkinDataBase.csv`。
-2. 同目录还会生成 `UserData\LongYinCustomClothData\Vanilla_SkinDataBase.csv`。
+1. 第一次启动游戏后，Mod 会在游戏根目录生成 `UserData\CustomClothData\SkinDataBase.csv`。
+2. 同目录还会生成 `UserData\CustomClothData\Vanilla_SkinDataBase.csv`。
 3. 配置文件路径：
-   `UserData\LongYinCustomClothData\SkinDataBase.csv`
+   `UserData\CustomClothData\SkinDataBase.csv`
 4. 默认表头固定为：
    `id,名字,加成效果,DLC`
 5. 四列说明如下：
@@ -168,5 +168,5 @@
 3. 如果只是想做“旧衣服换名字、换加成”，当前版本已经够用。
 
 【发布文件】
-1. DLL：`LongYinCustomClothData.dll`
-2. 压缩包：`LongYinCustomClothData-v1.0.0.zip`
+1. DLL：`CustomClothData.dll`
+2. 压缩包：`CustomClothData-v1.0.0.zip`

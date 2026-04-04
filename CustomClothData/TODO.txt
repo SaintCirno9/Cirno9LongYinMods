@@ -1,4 +1,4 @@
-LongYinCustomClothData TODO
+CustomClothData TODO
 
 1. 当前版本目标
    - 只支持覆盖原版 `SkinDataBase` 已存在的服装条目。

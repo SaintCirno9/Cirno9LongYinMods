@@ -11,10 +11,10 @@ using Il2CppInterop.Runtime;
 using MelonLoader;
 using UnityEngine;
 
-[assembly: MelonInfo(typeof(LongYinCustomClothData.Main), "LongYinCustomClothData", "1.0.0", "SaintCirno9", null)]
+[assembly: MelonInfo(typeof(CustomClothData.Main), "CustomClothData", "1.0.0", "SaintCirno9", null)]
 [assembly: MelonGame("TppStudio", "LongYinLiZhiZhuan")]
 
-namespace LongYinCustomClothData
+namespace CustomClothData
 {
     internal sealed class LoadedConfigData
     {
@@ -60,7 +60,7 @@ namespace LongYinCustomClothData
 
     public sealed class Main : MelonMod
     {
-        internal static readonly string ConfigDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "UserData", "LongYinCustomClothData");
+        internal static readonly string ConfigDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "UserData", "CustomClothData");
         internal static readonly string ClothConfigPath = Path.Combine(ConfigDir, "SkinDataBase.csv");
         internal static readonly string VanillaExportPath = Path.Combine(ConfigDir, "Vanilla_SkinDataBase.csv");
 
@@ -112,7 +112,7 @@ namespace LongYinCustomClothData
         {
             Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
             EnsureConfigExists();
-            LOG.Msg($"LongYinCustomClothData 已加载，配置目录：{ConfigDir}");
+            LOG.Msg($"CustomClothData 已加载，配置目录：{ConfigDir}");
             LOG.Msg("已确认服装数据资源入口：GameData/SkinDataBase");
         }
 
