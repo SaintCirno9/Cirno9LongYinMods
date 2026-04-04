@@ -142,9 +142,9 @@ namespace CustomClothData
         {
             try
             {
-                string content = File.ReadAllText(path);
+                string content = ReadAllTextShared(path);
                 string normalized = content.TrimStart('\uFEFF', '\r', '\n');
-                if (normalized.StartsWith(header, StringComparison.Ordinal))
+                if (HasExpectedHeaderLine(normalized, header))
                 {
                     return;
                 }
@@ -335,6 +335,7 @@ namespace CustomClothData
             }
 
             var customById = new Dictionary<string, string>(StringComparer.Ordinal);
+            var customCellsById = new Dictionary<string, string[]>(StringComparer.Ordinal);
             var ignoredNewIds = new List<string>();
             foreach (string rawLine in customLines.Skip(1))
             {
@@ -359,6 +360,7 @@ namespace CustomClothData
                 }
 
                 customById[id] = line;
+                customCellsById[id] = cells;
             }
 
             if (ignoredNewIds.Count > 0)
@@ -388,7 +390,15 @@ namespace CustomClothData
                 string id = GetCell(cells, vanillaIdCol);
                 if (!string.IsNullOrWhiteSpace(id) && customById.TryGetValue(id, out string replacementLine))
                 {
-                    outputLines.Add(replacementLine);
+                    if (customCellsById.TryGetValue(id, out string[] replacementCells))
+                    {
+                        outputLines.Add(MergeCsvRowByHeaders(vanillaHeaders, cells, customHeaders, replacementCells));
+                    }
+                    else
+                    {
+                        outputLines.Add(replacementLine);
+                    }
+
                     matchedIds.Add(id);
                     replacedCount++;
                     continue;
@@ -442,9 +452,10 @@ namespace CustomClothData
 
         internal static int FindColumnIndex(string[] headers, string columnName)
         {
+            string normalizedColumnName = NormalizeHeaderName(columnName);
             for (int i = 0; i < headers.Length; i++)
             {
-                if (string.Equals(headers[i].Trim('\uFEFF', ' ', '\t'), columnName, StringComparison.OrdinalIgnoreCase))
+                if (string.Equals(NormalizeHeaderName(headers[i]), normalizedColumnName, StringComparison.Ordinal))
                 {
                     return i;
                 }
@@ -468,7 +479,7 @@ namespace CustomClothData
             bool valid = true;
             foreach (string requiredHeader in requiredHeaders)
             {
-                if (headers.Any(header => string.Equals(header, requiredHeader, StringComparison.OrdinalIgnoreCase)))
+                if (headers.Any(header => string.Equals(NormalizeHeaderName(header), NormalizeHeaderName(requiredHeader), StringComparison.Ordinal)))
                 {
                     continue;
                 }
@@ -480,7 +491,76 @@ namespace CustomClothData
             return valid;
         }
 
-        private static string[] ReadAllLinesShared(string path, int maxAttempts = 5)
+        private static bool HasExpectedHeaderLine(string text, string header)
+        {
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                return false;
+            }
+
+            string firstLine = text.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None)[0];
+            string[] actualHeaders = SplitCsvLine(firstLine);
+            string[] expectedHeaders = SplitCsvLine(header);
+            if (actualHeaders.Length != expectedHeaders.Length)
+            {
+                return false;
+            }
+
+            foreach (string expectedHeader in expectedHeaders)
+            {
+                if (!actualHeaders.Any(actualHeader => string.Equals(NormalizeHeaderName(actualHeader), NormalizeHeaderName(expectedHeader), StringComparison.Ordinal)))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        private static string MergeCsvRowByHeaders(string[] vanillaHeaders, string[] vanillaCells, string[] customHeaders, string[] customCells)
+        {
+            string[] mergedCells = new string[Math.Max(vanillaHeaders.Length, vanillaCells.Length)];
+            for (int i = 0; i < mergedCells.Length; i++)
+            {
+                mergedCells[i] = i < vanillaCells.Length ? vanillaCells[i] : string.Empty;
+            }
+
+            for (int i = 0; i < vanillaHeaders.Length; i++)
+            {
+                int customColumnIndex = FindColumnIndex(customHeaders, vanillaHeaders[i]);
+                if (customColumnIndex < 0 || customColumnIndex >= customCells.Length)
+                {
+                    continue;
+                }
+
+                mergedCells[i] = customCells[customColumnIndex];
+            }
+
+            return JoinCsvLine(mergedCells);
+        }
+
+        private static string JoinCsvLine(string[] cells)
+        {
+            return string.Join(",", cells.Select(EscapeCsvCell));
+        }
+
+        private static string EscapeCsvCell(string cell)
+        {
+            string value = cell ?? string.Empty;
+            if (value.IndexOfAny(new[] { ',', '"', '\r', '\n' }) < 0)
+            {
+                return value;
+            }
+
+            return "\"" + value.Replace("\"", "\"\"") + "\"";
+        }
+
+        private static string NormalizeHeaderName(string header)
+        {
+            return (header ?? string.Empty).Trim('\uFEFF', ' ', '\t').ToLowerInvariant();
+        }
+
+        private static string ReadAllTextShared(string path, int maxAttempts = 5)
         {
             for (int attempt = 1; attempt <= maxAttempts; attempt++)
             {
@@ -498,13 +578,13 @@ namespace CustomClothData
                     {
                         Encoding strictUtf8 = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);
                         string textUtf8 = strictUtf8.GetString(bytes);
-                        return textUtf8.Replace("\uFEFF", string.Empty).Split(new[] { "\r\n", "\n" }, StringSplitOptions.None);
+                        return textUtf8.Replace("\uFEFF", string.Empty);
                     }
                     catch (DecoderFallbackException)
                     {
                         LOG.Warning($"[{Path.GetFileName(path)}] 不符合标准 UTF-8 编码，已启动 GBK 容错解析。");
                         string textGbk = Encoding.GetEncoding("gbk").GetString(bytes);
-                        return textGbk.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None);
+                        return textGbk;
                     }
                 }
                 catch (IOException) when (attempt < maxAttempts)
@@ -515,7 +595,12 @@ namespace CustomClothData
 
             using var finalStream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
             using var reader = new StreamReader(finalStream, Encoding.UTF8);
-            return reader.ReadToEnd().Split(new[] { "\r\n", "\n" }, StringSplitOptions.None);
+            return reader.ReadToEnd();
+        }
+
+        private static string[] ReadAllLinesShared(string path, int maxAttempts = 5)
+        {
+            return ReadAllTextShared(path, maxAttempts).Split(new[] { "\r\n", "\n" }, StringSplitOptions.None);
         }
     }
 
