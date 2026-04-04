@@ -1,0 +1,35 @@
+LongYinCustomClothData TODO
+
+1. 当前版本目标
+   - 只支持覆盖原版 `SkinDataBase` 已存在的服装条目。
+   - 暂时禁用新增服装 `id` 的注入，避免数据存在但外观资源不存在时出现显示异常。
+
+2. 下一阶段可行方案
+   - 方案 A：新增数据，外观复用旧皮肤
+     - 新增一份 `SkinVisualMapping` 配置。
+     - 允许自定义 `skinID` 映射到某个原版 `skinID + skinLv`。
+     - 在 `HeroData.GetSkinName` 或 `HeroData.RefreshHeroSkeleton` 处把新服装重定向到旧外观。
+     - 价值：实现成本低，能稳定支持“新名字 + 新属性 + 旧外观复用”。
+
+   - 方案 B：新增数据，并支持 UI 正常选择
+     - 在换装列表初始化和解锁判定处补丁，确认新 `skinID` 能进入选择列表。
+     - 同时配合方案 A 的外观映射，避免选中后找不到皮肤资源。
+     - 价值：从玩家视角更像“真的新增服装”，但本质仍然复用旧美术。
+
+   - 方案 C：真正新增服装外观资源
+     - 继续逆向 Spine 皮肤加载流程。
+     - 确认角色骨骼当前使用的 `SkeletonDataAsset / Skin / Attachment` 资源组织方式。
+     - 研究能否运行时注入自定义 atlas、attachment 或追加新 skin。
+     - 价值：可以做真正的新服装外观；代价最高，风险也最高。
+
+3. 具体待查入口
+   - `HeroData.GetSkinName`
+   - `HeroData.RefreshHeroSkeleton`
+   - `HeroDetailController.InitClothList`
+   - `HeroDetailController.AddClothChoice`
+   - `HeroDetailController.SureChangeNowShowHeroCloth`
+   - `StartMenuController.ClothDropDownValueChange`
+
+4. 文档待办
+   - 如果后续落地方案 A/B，需要在 README 中补一节“外观映射”说明。
+   - 如果后续落地方案 C，需要单独写资源目录规范和示例发布包结构。
