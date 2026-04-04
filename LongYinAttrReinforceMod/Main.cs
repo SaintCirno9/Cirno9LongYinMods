@@ -10,7 +10,7 @@ using HarmonyLib;
 using Il2Cpp;
 using MelonLoader;
 
-[assembly: MelonInfo(typeof(LongYinAttrReinforceMod.Main), "LongYinAttrReinforceMod", "0.2.0", "SaintCirno9", null)]
+[assembly: MelonInfo(typeof(LongYinAttrReinforceMod.Main), "LongYinAttrReinforceMod", "1.0.0", "SaintCirno9", null)]
 [assembly: MelonGame("TppStudio", "LongYinLiZhiZhuan")]
 
 namespace LongYinAttrReinforceMod
@@ -317,7 +317,7 @@ namespace LongYinAttrReinforceMod
             ("Mag", 5)
         };
 
-        public static void ApplyReinforceToCountedHero(HeroData hero)
+        public static void ApplyReinforceToCountedHero(HeroData hero, ResourceRatioSnapshot snapshot)
         {
             if (hero == null || hero.isSummon || hero.totalAddData == null)
             {
@@ -347,6 +347,7 @@ namespace LongYinAttrReinforceMod
             }
 
             RecalculateHeroResource(hero);
+            RestoreCurrentResourceByRatio(hero, snapshot, Math.Abs(extraMaxHp) > FloatEpsilon, Math.Abs(extraMaxMana) > FloatEpsilon);
         }
 
         private static float CalculateExtraMaxHp(HeroData hero)
@@ -410,6 +411,24 @@ namespace LongYinAttrReinforceMod
             hero.maxMana = Max(20f, manaRate * (GlobalData.HeroBaseMp + maxManaAdd));
             hero.realMaxMana = Max(20f, (1f - (hero.internalInjury * 2f + hero.poisonInjury) / 400f) * hero.maxMana);
             hero.mana = Clamp(hero.mana, 0f, hero.realMaxMana);
+        }
+
+        private static void RestoreCurrentResourceByRatio(HeroData hero, ResourceRatioSnapshot snapshot, bool hpChanged, bool manaChanged)
+        {
+            if (hero == null)
+            {
+                return;
+            }
+
+            if (hpChanged && snapshot.HasHpRatio)
+            {
+                hero.hp = Clamp(hero.realMaxHp * snapshot.HpRatio, 0f, hero.realMaxHp);
+            }
+
+            if (manaChanged && snapshot.HasManaRatio)
+            {
+                hero.mana = Clamp(hero.realMaxMana * snapshot.ManaRatio, 0f, hero.realMaxMana);
+            }
         }
 
         private static float Clamp(float value, float min, float max)
@@ -490,13 +509,69 @@ namespace LongYinAttrReinforceMod
         }
     }
 
+    internal readonly struct ResourceRatioSnapshot
+    {
+        public ResourceRatioSnapshot(bool hasHpRatio, float hpRatio, bool hasManaRatio, float manaRatio)
+        {
+            HasHpRatio = hasHpRatio;
+            HpRatio = hpRatio;
+            HasManaRatio = hasManaRatio;
+            ManaRatio = manaRatio;
+        }
+
+        public bool HasHpRatio { get; }
+
+        public float HpRatio { get; }
+
+        public bool HasManaRatio { get; }
+
+        public float ManaRatio { get; }
+    }
+
     [HarmonyPatch(typeof(GameController), "CountHeroData")]
     internal static class ReinforceCountHeroDataPatch
     {
-        [HarmonyPostfix]
-        public static void Postfix(HeroData hero)
+        [HarmonyPrefix]
+        public static void Prefix(HeroData hero, out ResourceRatioSnapshot __state)
         {
-            AttributeReinforceRuntime.ApplyReinforceToCountedHero(hero);
+            __state = CaptureRatioSnapshot(hero);
+        }
+
+        [HarmonyPostfix]
+        public static void Postfix(HeroData hero, ResourceRatioSnapshot __state)
+        {
+            AttributeReinforceRuntime.ApplyReinforceToCountedHero(hero, __state);
+        }
+
+        private static ResourceRatioSnapshot CaptureRatioSnapshot(HeroData hero)
+        {
+            if (hero == null)
+            {
+                return default;
+            }
+
+            bool hasHpRatio = hero.realMaxHp > 0.0001f;
+            float hpRatio = hasHpRatio ? ClampRatio(hero.hp / hero.realMaxHp) : 0f;
+
+            bool hasManaRatio = hero.realMaxMana > 0.0001f;
+            float manaRatio = hasManaRatio ? ClampRatio(hero.mana / hero.realMaxMana) : 0f;
+
+            return new ResourceRatioSnapshot(hasHpRatio, hpRatio, hasManaRatio, manaRatio);
+        }
+
+        private static float ClampRatio(float value)
+        {
+            if (value < 0f)
+            {
+                return 0f;
+            }
+
+            if (value > 1f)
+            {
+                return 1f;
+            }
+
+            return value;
         }
     }
 }
