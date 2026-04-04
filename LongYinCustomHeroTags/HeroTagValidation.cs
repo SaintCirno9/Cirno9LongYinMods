@@ -34,7 +34,17 @@ namespace LongYinCustomHeroTags
                 return false;
             }
 
-            if (string.IsNullOrWhiteSpace(row.RawEffectText) || !ValidateEffectText(row.RawEffectText))
+            if (string.IsNullOrWhiteSpace(row.RawEffectText) || !CanSplitEffectText(row.RawEffectText))
+            {
+                return false;
+            }
+
+            if (!CanSplitListField(row.RequirementText))
+            {
+                return false;
+            }
+
+            if (!CanSplitListField(row.ReplaceText))
             {
                 return false;
             }
@@ -127,9 +137,19 @@ namespace LongYinCustomHeroTags
                 order = 0;
             }
 
-            if (!ValidateEffectText(row.RawEffectText))
+            if (!TrySplitEffectText(row.RawEffectText, row.SourceName, row.RowNumber, out _))
             {
                 Main.LOG.Warning($"已跳过 {row.SourceName} 第 {row.RowNumber} 行：效果为空或格式无效。");
+                return false;
+            }
+
+            if (!TrySplitListField(row.RequirementText, "领悟需求", row.SourceName, row.RowNumber, out string[] requirements))
+            {
+                return false;
+            }
+
+            if (!TrySplitListField(row.ReplaceText, "替换", row.SourceName, row.RowNumber, out string[] replaceTags))
+            {
                 return false;
             }
 
@@ -157,8 +177,8 @@ namespace LongYinCustomHeroTags
                 OppositeMeaning = row.OppositeMeaning,
                 CanRandom = HeroTagResourcePatch.ParseBool(row.CanRandomText),
                 Order = order,
-                Requirements = row.Requirements ?? Array.Empty<string>(),
-                ReplaceTags = row.ReplaceTags ?? Array.Empty<string>(),
+                Requirements = requirements,
+                ReplaceTags = replaceTags,
                 Category = category,
                 ShowRightLine = HeroTagResourcePatch.ParseBool(row.ShowRightLineText, defaultValue: true),
             };
@@ -194,15 +214,104 @@ namespace LongYinCustomHeroTags
                 || text.Contains("é");
         }
 
-        private static bool ValidateEffectText(string effectText)
+        private static bool CanSplitEffectText(string effectText)
         {
             if (string.IsNullOrWhiteSpace(effectText))
             {
                 return false;
             }
 
-            string[] values = effectText.Split(new[] { ';', '|', '+' }, StringSplitOptions.RemoveEmptyEntries);
+            return !ContainsEmptyDelimitedItem(effectText, ';', '|');
+        }
+
+        private static bool CanSplitListField(string text)
+        {
+            return !ContainsEmptyDelimitedItem(text, ';', '|', '+');
+        }
+
+        private static bool TrySplitEffectText(
+            string effectText,
+            string sourceName,
+            int rowNumber,
+            out string[] values)
+        {
+            values = Array.Empty<string>();
+            if (string.IsNullOrWhiteSpace(effectText))
+            {
+                return false;
+            }
+
+            if (ContainsEmptyDelimitedItem(effectText, ';', '|'))
+            {
+                Main.LOG.Warning($"已跳过 {sourceName} 第 {rowNumber} 行：效果包含空项，请检查分隔符。");
+                return false;
+            }
+
+            values = SplitAndTrim(effectText, ';', '|');
             return values.Length > 0;
+        }
+
+        private static bool TrySplitListField(
+            string text,
+            string columnName,
+            string sourceName,
+            int rowNumber,
+            out string[] values)
+        {
+            values = Array.Empty<string>();
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                return true;
+            }
+
+            if (ContainsEmptyDelimitedItem(text, ';', '|', '+'))
+            {
+                Main.LOG.Warning($"已跳过 {sourceName} 第 {rowNumber} 行：{columnName} 包含空项，请检查分隔符。");
+                return false;
+            }
+
+            values = SplitAndTrim(text, ';', '|', '+');
+            return true;
+        }
+
+        private static bool ContainsEmptyDelimitedItem(string text, params char[] delimiters)
+        {
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                return false;
+            }
+
+            string[] values = text.Split(delimiters, StringSplitOptions.None);
+            if (values.Length <= 1)
+            {
+                return false;
+            }
+
+            foreach (string value in values)
+            {
+                if (string.IsNullOrWhiteSpace(value))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static string[] SplitAndTrim(string text, params char[] delimiters)
+        {
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                return Array.Empty<string>();
+            }
+
+            string[] values = text.Split(delimiters, StringSplitOptions.RemoveEmptyEntries);
+            for (int i = 0; i < values.Length; i++)
+            {
+                values[i] = values[i].Trim();
+            }
+
+            return values;
         }
 
         private static void ValidateRequirementReferences(string ownerName, string[] requirements, System.Collections.Generic.HashSet<string> validNames)

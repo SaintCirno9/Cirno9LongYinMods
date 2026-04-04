@@ -10,7 +10,7 @@ using Il2Cpp;
 using Il2CppInterop.Runtime;
 using UnityEngine;
 
-[assembly: MelonInfo(typeof(LongYinCustomHeroTags.Main), "LongYinCustomHeroTags", "2.0.2", "SaintCirno9", null)]
+[assembly: MelonInfo(typeof(LongYinCustomHeroTags.Main), "LongYinCustomHeroTags", "2.0.3", "SaintCirno9", null)]
 [assembly: MelonGame("TppStudio", "LongYinLiZhiZhuan")]
 
 namespace LongYinCustomHeroTags
@@ -89,6 +89,10 @@ namespace LongYinCustomHeroTags
         public string CanRandomText { get; init; } = string.Empty;
 
         public string OrderText { get; init; } = string.Empty;
+
+        public string RequirementText { get; init; } = string.Empty;
+
+        public string ReplaceText { get; init; } = string.Empty;
 
         public string[] Requirements { get; init; } = Array.Empty<string>();
 
@@ -688,6 +692,8 @@ namespace LongYinCustomHeroTags
                 OppositeMeaning = GetCell(headers, cells, "反义组"),
                 CanRandomText = GetCell(headers, cells, "可随机"),
                 OrderText = GetCell(headers, cells, "展示顺序"),
+                RequirementText = GetCell(headers, cells, "领悟需求"),
+                ReplaceText = GetCell(headers, cells, "替换"),
                 Requirements = SplitListCell(GetCell(headers, cells, "领悟需求")),
                 ReplaceTags = SplitListCell(GetCell(headers, cells, "替换")),
                 Category = GetCell(headers, cells, "大类"),
@@ -787,6 +793,8 @@ namespace LongYinCustomHeroTags
                 OppositeMeaning = currentRow.OppositeMeaning,
                 CanRandomText = currentRow.CanRandomText,
                 OrderText = currentRow.OrderText,
+                RequirementText = currentRow.RequirementText,
+                ReplaceText = currentRow.ReplaceText,
                 Requirements = currentRow.Requirements,
                 ReplaceTags = currentRow.ReplaceTags,
                 Category = currentRow.Category,
@@ -1315,7 +1323,7 @@ namespace LongYinCustomHeroTags
                 resolved.Add(normalizedReference);
             }
 
-            return string.Join("+", resolved.Distinct(StringComparer.OrdinalIgnoreCase));
+            return string.Join(";", resolved.Distinct(StringComparer.OrdinalIgnoreCase));
         }
 
         private static string BuildRequirementCell(
@@ -1472,7 +1480,7 @@ namespace LongYinCustomHeroTags
                 return false;
             }
 
-            patchedReplaceCell = string.Join("+", resolved.Distinct(StringComparer.OrdinalIgnoreCase));
+            patchedReplaceCell = string.Join(";", resolved.Distinct(StringComparer.OrdinalIgnoreCase));
             return true;
         }
 
