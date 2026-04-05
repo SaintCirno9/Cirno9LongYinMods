@@ -10,7 +10,7 @@ using HarmonyLib;
 using Il2Cpp;
 using MelonLoader;
 
-[assembly: MelonInfo(typeof(LongYinAttrReinforceMod.Main), "LongYinAttrReinforceMod", "1.2.0", "SaintCirno9", null)]
+[assembly: MelonInfo(typeof(LongYinAttrReinforceMod.Main), "LongYinAttrReinforceMod", "1.2.1", "SaintCirno9", null)]
 [assembly: MelonGame("TppStudio", "LongYinLiZhiZhuan")]
 
 namespace LongYinAttrReinforceMod
@@ -418,19 +418,23 @@ namespace LongYinAttrReinforceMod
                 return 0f;
             }
 
-            if (vanillaMax > FloatEpsilon)
-            {
-                // 原版 CountHeroData 会先清空并重建 totalAddData，再按新上限 Clamp 当前值。
-                // 因此这里优先保留“原版这次计算后的缺口”，只补回我们额外抬高的上限差值。
-                float clampedVanillaCurrent = Clamp(vanillaCurrent, 0f, vanillaMax);
-                float vanillaMissing = vanillaMax - clampedVanillaCurrent;
-                return Clamp(newMax - vanillaMissing, 0f, newMax);
-            }
-
             if (oldMax > FloatEpsilon)
             {
+                // 当重算后上限回落时，优先保留旧绝对值，只做裁剪。
+                // 这样可以避免战斗结算等场景里因为上限先降后升，导致当前值被额外“补满”。
+                if (newMax + FloatEpsilon < oldMax)
+                {
+                    return Clamp(oldCurrent, 0f, newMax);
+                }
+
                 float ratio = Clamp(oldCurrent / oldMax, 0f, 1f);
                 return Clamp(newMax * ratio, 0f, newMax);
+            }
+
+            if (vanillaMax > FloatEpsilon)
+            {
+                float patchedDelta = newMax - vanillaMax;
+                return Clamp(vanillaCurrent + patchedDelta, 0f, newMax);
             }
 
             return newMax;
