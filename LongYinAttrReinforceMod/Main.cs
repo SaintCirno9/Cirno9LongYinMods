@@ -10,7 +10,7 @@ using HarmonyLib;
 using Il2Cpp;
 using MelonLoader;
 
-[assembly: MelonInfo(typeof(LongYinAttrReinforceMod.Main), "LongYinAttrReinforceMod", "1.2.1", "SaintCirno9", null)]
+[assembly: MelonInfo(typeof(LongYinAttrReinforceMod.Main), "LongYinAttrReinforceMod", "1.3.0", "SaintCirno9", null)]
 [assembly: MelonGame("TppStudio", "LongYinLiZhiZhuan")]
 
 namespace LongYinAttrReinforceMod
@@ -25,7 +25,7 @@ namespace LongYinAttrReinforceMod
             Log.Msg("LongYinAttrReinforceMod 已加载。");
             Log.Msg("配置文件：" + ReinforceConfig.ConfigFilePath);
             Log.Msg(ReinforceConfig.BuildSummary());
-            Log.Msg("当前版本使用 CountHeroData 后置修正，额外叠加生命与内力上限结果。");
+            Log.Msg("当前版本通过 HeroSpeAddData.Get 注入六维额外生命与内力上限。");
         }
     }
 
@@ -290,8 +290,8 @@ namespace LongYinAttrReinforceMod
     internal static class AttributeReinforceRuntime
     {
         private const float FloatEpsilon = 0.0001f;
-        private const int MaxHpAddType = 57;
-        private const int MaxManaAddType = 59;
+        internal const int MaxHpAddType = 57;
+        internal const int MaxManaAddType = 59;
         private static readonly (string Key, int Index)[] BaseAttrs =
         {
             ("Str", 0),
@@ -302,142 +302,27 @@ namespace LongYinAttrReinforceMod
             ("Mag", 5)
         };
 
-        public static void ApplyReinforceToCountedHero(HeroData hero, ResourceStateSnapshot snapshot)
+        public static bool TryApplyExtraResourceGet(HeroData hero, int type, ref float value)
         {
-            if (hero == null || hero.isSummon || hero.totalAddData == null)
+            if (hero == null || hero.isSummon)
             {
-                return;
+                return false;
             }
 
-            float extraMaxHp = CalculateExtraMaxHp(hero);
-            float extraMaxMana = CalculateExtraMaxMana(hero);
-            if (Math.Abs(extraMaxHp) <= FloatEpsilon && Math.Abs(extraMaxMana) <= FloatEpsilon)
+            float extraValue = type switch
             {
-                return;
+                MaxHpAddType => CalculateExtraBySelector(hero, ReinforceConfig.HpPerPoint),
+                MaxManaAddType => CalculateExtraBySelector(hero, ReinforceConfig.ManaPerPoint),
+                _ => 0f
+            };
+
+            if (Math.Abs(extraValue) <= FloatEpsilon)
+            {
+                return false;
             }
 
-            float vanillaHp = hero.hp;
-            float vanillaMana = hero.mana;
-            float vanillaRealMaxHp = hero.realMaxHp;
-            float vanillaRealMaxMana = hero.realMaxMana;
-
-            RecalculateHeroResource(hero, extraMaxHp, extraMaxMana);
-            RestoreCurrentResourceByRatio(
-                hero,
-                snapshot,
-                vanillaHp,
-                vanillaMana,
-                vanillaRealMaxHp,
-                vanillaRealMaxMana);
-        }
-
-        private static float CalculateExtraMaxHp(HeroData hero)
-        {
-            return CalculateExtraBySelector(hero, ReinforceConfig.HpPerPoint);
-        }
-
-        private static float CalculateExtraMaxMana(HeroData hero)
-        {
-            return CalculateExtraBySelector(hero, ReinforceConfig.ManaPerPoint);
-        }
-
-        private static float CalculateExtraBySelector(HeroData hero, Func<string, float> selector)
-        {
-            if (hero == null || selector == null)
-            {
-                return 0f;
-            }
-
-            float total = 0f;
-            foreach ((string key, int index) in BaseAttrs)
-            {
-                float attriValue = GetAttriValue(hero, index);
-                total += attriValue * selector(key);
-            }
-
-            return total;
-        }
-
-        private static float GetAttriValue(HeroData hero, int index)
-        {
-            if (HasListIndex(hero.totalAttri, index))
-            {
-                return GetListValue(hero.totalAttri, index);
-            }
-
-            if (HasListIndex(hero.baseAttri, index))
-            {
-                return GetListValue(hero.baseAttri, index);
-            }
-
-            return GetListValue(hero.maxAttri, index);
-        }
-
-        private static void RecalculateHeroResource(HeroData hero, float extraMaxHp, float extraMaxMana)
-        {
-            float maxHpAdd = hero.totalAddData.Get(MaxHpAddType) + extraMaxHp;
-            float maxManaAdd = hero.totalAddData.Get(MaxManaAddType) + extraMaxMana;
-            float hpRate = 1f + GetListValue(hero.totalFightSkill, 2) * 0.01f;
-            float manaRate = 1f + GetListValue(hero.totalFightSkill, 0) * 0.01f;
-
-            hero.maxhp = Max(10f, hpRate * (GlobalData.HeroBaseHp + maxHpAdd));
-            hero.realMaxHp = Max(10f, (1f - (hero.externalInjury * 2f + hero.poisonInjury) / 400f) * hero.maxhp);
-            hero.hp = Clamp(hero.hp, 0f, hero.realMaxHp);
-
-            hero.maxMana = Max(20f, manaRate * (GlobalData.HeroBaseMp + maxManaAdd));
-            hero.realMaxMana = Max(20f, (1f - (hero.internalInjury * 2f + hero.poisonInjury) / 400f) * hero.maxMana);
-            hero.mana = Clamp(hero.mana, 0f, hero.realMaxMana);
-        }
-
-        private static void RestoreCurrentResourceByRatio(
-            HeroData hero,
-            ResourceStateSnapshot snapshot,
-            float vanillaHp,
-            float vanillaMana,
-            float vanillaRealMaxHp,
-            float vanillaRealMaxMana)
-        {
-            if (hero == null || !snapshot.HasValue)
-            {
-                return;
-            }
-
-            hero.hp = RestoreCurrentValueByRatio(snapshot.Hp, snapshot.RealMaxHp, vanillaHp, vanillaRealMaxHp, hero.realMaxHp);
-            hero.mana = RestoreCurrentValueByRatio(snapshot.Mana, snapshot.RealMaxMana, vanillaMana, vanillaRealMaxMana, hero.realMaxMana);
-        }
-
-        private static float RestoreCurrentValueByRatio(
-            float oldCurrent,
-            float oldMax,
-            float vanillaCurrent,
-            float vanillaMax,
-            float newMax)
-        {
-            if (newMax <= FloatEpsilon)
-            {
-                return 0f;
-            }
-
-            if (oldMax > FloatEpsilon)
-            {
-                // 当重算后上限回落时，优先保留旧绝对值，只做裁剪。
-                // 这样可以避免战斗结算等场景里因为上限先降后升，导致当前值被额外“补满”。
-                if (newMax + FloatEpsilon < oldMax)
-                {
-                    return Clamp(oldCurrent, 0f, newMax);
-                }
-
-                float ratio = Clamp(oldCurrent / oldMax, 0f, 1f);
-                return Clamp(newMax * ratio, 0f, newMax);
-            }
-
-            if (vanillaMax > FloatEpsilon)
-            {
-                float patchedDelta = newMax - vanillaMax;
-                return Clamp(vanillaCurrent + patchedDelta, 0f, newMax);
-            }
-
-            return newMax;
+            value += extraValue;
+            return true;
         }
 
         public static void FillGeneratedHeroCurrentResources(HeroData hero)
@@ -572,57 +457,184 @@ namespace LongYinAttrReinforceMod
                 return 0f;
             }
         }
-    }
 
-    internal readonly struct ResourceStateSnapshot
-    {
-        public ResourceStateSnapshot(
-            float hp,
-            float mana,
-            float realMaxHp,
-            float realMaxMana)
+        private static float CalculateExtraBySelector(HeroData hero, Func<string, float> selector)
         {
-            Hp = hp;
-            Mana = mana;
-            RealMaxHp = realMaxHp;
-            RealMaxMana = realMaxMana;
-            HasValue = true;
+            if (hero == null || selector == null)
+            {
+                return 0f;
+            }
+
+            float total = 0f;
+            foreach ((string key, int index) in BaseAttrs)
+            {
+                float attriValue = GetAttriValue(hero, index);
+                total += attriValue * selector(key);
+            }
+
+            return total;
         }
 
-        public float Hp { get; }
+        private static float GetAttriValue(HeroData hero, int index)
+        {
+            if (HasListIndex(hero.totalAttri, index))
+            {
+                return GetListValue(hero.totalAttri, index);
+            }
 
-        public float Mana { get; }
+            if (HasListIndex(hero.baseAttri, index))
+            {
+                return GetListValue(hero.baseAttri, index);
+            }
 
-        public float RealMaxHp { get; }
+            return GetListValue(hero.maxAttri, index);
+        }
+    }
 
-        public float RealMaxMana { get; }
+    internal static class HeroAddDataOwnershipRegistry
+    {
+        private static readonly object Sync = new object();
+        private static readonly Dictionary<ulong, HeroData> OwnerByAddDataPointer = new Dictionary<ulong, HeroData>();
 
-        public bool HasValue { get; }
+        [ThreadStatic]
+        private static HeroData _currentCountHero;
+
+        internal static void EnterCountHeroData(HeroData hero)
+        {
+            _currentCountHero = hero;
+            Register(hero);
+        }
+
+        internal static void ExitCountHeroData(HeroData hero)
+        {
+            if (ReferenceEquals(_currentCountHero, hero))
+            {
+                _currentCountHero = null;
+            }
+        }
+
+        internal static void Register(HeroData hero)
+        {
+            if (hero == null)
+            {
+                return;
+            }
+
+            RegisterAddData(hero.baseAddData, hero);
+            RegisterAddData(hero.totalAddData, hero);
+        }
+
+        internal static HeroData Resolve(HeroSpeAddData addData)
+        {
+            if (addData == null)
+            {
+                return null;
+            }
+
+            HeroData currentHero = _currentCountHero;
+            if (BelongsToHero(addData, currentHero))
+            {
+                return currentHero;
+            }
+
+            ulong pointerValue = GetPointerValue(addData);
+            if (pointerValue == 0)
+            {
+                return null;
+            }
+
+            lock (Sync)
+            {
+                if (OwnerByAddDataPointer.TryGetValue(pointerValue, out HeroData owner) && owner != null)
+                {
+                    return owner;
+                }
+            }
+
+            return null;
+        }
+
+        private static void RegisterAddData(HeroSpeAddData addData, HeroData hero)
+        {
+            ulong pointerValue = GetPointerValue(addData);
+            if (pointerValue == 0)
+            {
+                return;
+            }
+
+            lock (Sync)
+            {
+                OwnerByAddDataPointer[pointerValue] = hero;
+            }
+        }
+
+        private static bool BelongsToHero(HeroSpeAddData addData, HeroData hero)
+        {
+            if (addData == null || hero == null)
+            {
+                return false;
+            }
+
+            return ReferenceEquals(addData, hero.baseAddData) || ReferenceEquals(addData, hero.totalAddData);
+        }
+
+        private static ulong GetPointerValue(Il2CppSystem.Object obj)
+        {
+            if (obj == null || obj.Pointer == IntPtr.Zero)
+            {
+                return 0;
+            }
+
+            return unchecked((ulong)obj.Pointer.ToInt64());
+        }
     }
 
     [HarmonyPatch(typeof(GameController), "CountHeroData")]
     internal static class ReinforceCountHeroDataPatch
     {
         [HarmonyPrefix]
-        public static void Prefix(HeroData hero, out ResourceStateSnapshot __state)
+        public static void Prefix(HeroData hero)
         {
-            if (hero == null)
+            HeroAddDataOwnershipRegistry.EnterCountHeroData(hero);
+        }
+
+        [HarmonyFinalizer]
+        public static void Finalizer(HeroData hero)
+        {
+            HeroAddDataOwnershipRegistry.ExitCountHeroData(hero);
+        }
+    }
+
+    [HarmonyPatch(typeof(HeroSpeAddData), "Get", new Type[]
+    {
+        typeof(int)
+    })]
+    internal static class ReinforceHeroSpeAddDataGetPatch
+    {
+        // 当前实现优先选择 Get 路线：
+        // 1. totalAddData.Get(57/59) 能直接影响 CountHeroData 末段的生命与内力上限公式；
+        // 2. baseAddData.Get(57/59) 也会一起反映六维带来的基础额外值。
+        //
+        // 另一套备选方案是在 CountHeroData 内部拦截 HeroSpeAddData__op_Addition(totalAddData, baseAddData)：
+        // 只在 baseAddData 并入 totalAddData 的那一步，把六维加成并入合并结果。
+        // 那条线更偏“基础层合并”语义，也有不错的扩展性；
+        // 但它天然覆盖不到 baseAddData.Get(57/59) 这类直接读取，所以当前版本仍以 Get 方案为主。
+        [HarmonyPostfix]
+        public static void Postfix(HeroSpeAddData __instance, int speAddDataType, ref float __result)
+        {
+            if (speAddDataType != AttributeReinforceRuntime.MaxHpAddType &&
+                speAddDataType != AttributeReinforceRuntime.MaxManaAddType)
             {
-                __state = default;
                 return;
             }
 
-            __state = new ResourceStateSnapshot(
-                hero.hp,
-                hero.mana,
-                hero.realMaxHp,
-                hero.realMaxMana);
-        }
+            HeroData hero = HeroAddDataOwnershipRegistry.Resolve(__instance);
+            if (hero == null)
+            {
+                return;
+            }
 
-        [HarmonyPostfix]
-        public static void Postfix(HeroData hero, ResourceStateSnapshot __state)
-        {
-            AttributeReinforceRuntime.ApplyReinforceToCountedHero(hero, __state);
+            AttributeReinforceRuntime.TryApplyExtraResourceGet(hero, speAddDataType, ref __result);
         }
     }
 
@@ -643,6 +655,7 @@ namespace LongYinAttrReinforceMod
         [HarmonyPostfix]
         public static void Postfix(HeroData __result)
         {
+            HeroAddDataOwnershipRegistry.Register(__result);
             AttributeReinforceRuntime.FillGeneratedHeroCurrentResources(__result);
         }
     }
@@ -653,7 +666,18 @@ namespace LongYinAttrReinforceMod
         [HarmonyPostfix]
         public static void Postfix(GameController __instance)
         {
-            AttributeReinforceRuntime.RefreshNewGamePlayerCurrentResources(__instance);
+            // 先停用新开档主角的当前血蓝同步，观察仅靠 Get 注入时的原版表现。
+            // AttributeReinforceRuntime.RefreshNewGamePlayerCurrentResources(__instance);
+            if (__instance != null && __instance.worldData != null)
+            {
+                try
+                {
+                    HeroAddDataOwnershipRegistry.Register(__instance.worldData.Player());
+                }
+                catch
+                {
+                }
+            }
         }
     }
 
