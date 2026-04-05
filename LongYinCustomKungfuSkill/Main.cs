@@ -11,7 +11,7 @@ using Il2CppInterop.Runtime;
 using Il2CppSystem.Collections.Generic;
 using UnityEngine;
 
-[assembly: MelonInfo(typeof(LongYinCustomKungfuSkill.Main), "LongYinCustomKungfuSkill", "2.2.1", "SaintCirno9", null)]
+[assembly: MelonInfo(typeof(LongYinCustomKungfuSkill.Main), "LongYinCustomKungfuSkill", "2.3.0", "SaintCirno9", null)]
 [assembly: MelonGame("TppStudio", "LongYinLiZhiZhuan")]
 
 namespace LongYinCustomKungfuSkill
@@ -260,6 +260,16 @@ namespace LongYinCustomKungfuSkill
             }
         }
 
+        internal static void BindConfiguredSkillIcon(string runtimeSkillId, string sourceSkillId, SkillConfigOrigin origin)
+        {
+            if (string.IsNullOrWhiteSpace(runtimeSkillId) || string.IsNullOrWhiteSpace(sourceSkillId) || origin == null)
+            {
+                return;
+            }
+
+            RuntimeSkillAssetBindings[runtimeSkillId] = new RuntimeSkillAssetBinding(sourceSkillId, origin);
+        }
+
         internal static void ResetVanillaSkillIdsByType()
         {
             VanillaSkillIdsByType.Clear();
@@ -422,21 +432,34 @@ namespace LongYinCustomKungfuSkill
             }
 
             var yielded = new System.Collections.Generic.HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            if (RuntimeSkillAssetBindings.TryGetValue(skillId, out RuntimeSkillAssetBinding binding) &&
-                binding.Origin != null &&
-                !string.IsNullOrWhiteSpace(binding.Origin.IconDir))
+            if (!RuntimeSkillAssetBindings.TryGetValue(skillId, out RuntimeSkillAssetBinding binding) || binding.Origin == null)
             {
-                string fullPath = Path.Combine(binding.Origin.IconDir, $"{binding.SourceSkillId}.png");
+                yield break;
+            }
+
+            string sourceSkillId = string.IsNullOrWhiteSpace(binding.SourceSkillId) ? skillId : binding.SourceSkillId;
+            if (!string.IsNullOrWhiteSpace(binding.Origin.IconDir))
+            {
+                string fullPath = Path.Combine(binding.Origin.IconDir, $"{sourceSkillId}.png");
                 if (yielded.Add(fullPath))
                 {
-                    yield return (fullPath, Path.Combine(binding.Origin.RelativeIconDir, $"{binding.SourceSkillId}.png"));
+                    yield return (fullPath, Path.Combine(binding.Origin.RelativeIconDir, $"{sourceSkillId}.png"));
                 }
             }
 
-            string rootFullPath = Path.Combine(IconDir, $"{skillId}.png");
+            string rootFullPath = Path.Combine(IconDir, $"{sourceSkillId}.png");
             if (yielded.Add(rootFullPath))
             {
-                yield return (rootFullPath, Path.Combine("UserData", "LongYinCustomKungfuSkill", "Icons", $"{skillId}.png"));
+                yield return (rootFullPath, Path.Combine("UserData", "LongYinCustomKungfuSkill", "Icons", $"{sourceSkillId}.png"));
+            }
+
+            if (!string.Equals(sourceSkillId, skillId, StringComparison.Ordinal))
+            {
+                string legacyRootFullPath = Path.Combine(IconDir, $"{skillId}.png");
+                if (yielded.Add(legacyRootFullPath))
+                {
+                    yield return (legacyRootFullPath, Path.Combine("UserData", "LongYinCustomKungfuSkill", "Icons", $"{skillId}.png"));
+                }
             }
         }
 
@@ -1227,7 +1250,6 @@ namespace LongYinCustomKungfuSkill
             }
 
             var outputLines = new System.Collections.Generic.List<string> { vanillaLines[0] };
-            var matchedIds = new System.Collections.Generic.HashSet<string>(StringComparer.Ordinal);
             var appendedCustomSkillLogs = new System.Collections.Generic.List<(
                 string SkillType,
                 string RuntimeSkillId,
@@ -1251,9 +1273,9 @@ namespace LongYinCustomKungfuSkill
                 string id = Main.GetCell(cells, vanillaIdCol);
                 if (!string.IsNullOrWhiteSpace(id) && overrideById.TryGetValue(id, out LoadedSkillRow replacementRow))
                 {
+                    Main.BindConfiguredSkillIcon(id, id, replacementRow.Origin);
                     LogMergedRowChanges(vanillaHeaders, line, replacementRow.NormalizedLine, id);
                     outputLines.Add(replacementRow.NormalizedLine);
-                    matchedIds.Add(id);
                 }
                 else
                 {
@@ -1275,7 +1297,8 @@ namespace LongYinCustomKungfuSkill
                 string runtimeLine = Main.BuildCsvLine(cells);
                 outputLines.Add(runtimeLine);
                 Main.RegisterInjectedCustomSkillId(nextInjectedSkillId);
-                Main.RuntimeSkillAssetBindings[runtimeSkillId] = new RuntimeSkillAssetBinding(
+                Main.BindConfiguredSkillIcon(
+                    runtimeSkillId,
                     appendedRow.OriginalSkillId.ToString(CultureInfo.InvariantCulture),
                     appendedRow.Origin);
 
@@ -1397,7 +1420,8 @@ namespace LongYinCustomKungfuSkill
 
             if (int.TryParse(spriteName, NumberStyles.Integer, CultureInfo.InvariantCulture, out int skillId) &&
                 skillId >= 0 &&
-                skillId < Main.VanillaKungFuTotalCount)
+                skillId < Main.VanillaKungFuTotalCount &&
+                !Main.RuntimeSkillAssetBindings.ContainsKey(spriteName))
             {
                 return true;
             }
