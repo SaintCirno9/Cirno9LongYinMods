@@ -10,7 +10,7 @@ using HarmonyLib;
 using Il2Cpp;
 using MelonLoader;
 
-[assembly: MelonInfo(typeof(LongYinAttrReinforceMod.Main), "LongYinAttrReinforceMod", "1.0.0", "SaintCirno9", null)]
+[assembly: MelonInfo(typeof(LongYinAttrReinforceMod.Main), "LongYinAttrReinforceMod", "1.2.0", "SaintCirno9", null)]
 [assembly: MelonGame("TppStudio", "LongYinLiZhiZhuan")]
 
 namespace LongYinAttrReinforceMod
@@ -22,11 +22,10 @@ namespace LongYinAttrReinforceMod
         public override void OnInitializeMelon()
         {
             ReinforceConfig.Initialize();
-            HarmonyInstance.PatchAll(typeof(Main).Assembly);
             Log.Msg("LongYinAttrReinforceMod 已加载。");
             Log.Msg("配置文件：" + ReinforceConfig.ConfigFilePath);
             Log.Msg(ReinforceConfig.BuildSummary());
-            Log.Msg("当前版本使用 CountHeroData 后置修正，不再依赖旧版补差值状态。");
+            Log.Msg("当前版本使用 CountHeroData 后置修正，额外叠加生命与内力上限结果。");
         }
     }
 
@@ -144,8 +143,6 @@ namespace LongYinAttrReinforceMod
 
         private static ReinforceRules _rules = ReinforceRules.Default();
 
-        internal static bool IsCurrentRuleAllZero { get; private set; }
-
         internal static void Initialize()
         {
             try
@@ -165,8 +162,6 @@ namespace LongYinAttrReinforceMod
             {
                 TryRewriteCanonicalChinese(_rules);
             }
-
-            IsCurrentRuleAllZero = !HasAnyNonZero(_rules);
         }
 
         internal static float HpPerPoint(string key)
@@ -290,15 +285,6 @@ namespace LongYinAttrReinforceMod
             File.WriteAllText(filePath, content, Encoding.UTF8);
         }
 
-        private static bool HasAnyNonZero(ReinforceRules rules)
-        {
-            return rules.Str.Hp != 0f || rules.Str.Mana != 0f ||
-                   rules.Agl.Hp != 0f || rules.Agl.Mana != 0f ||
-                   rules.Inte.Hp != 0f || rules.Inte.Mana != 0f ||
-                   rules.Wil.Hp != 0f || rules.Wil.Mana != 0f ||
-                   rules.Con.Hp != 0f || rules.Con.Mana != 0f ||
-                   rules.Mag.Hp != 0f || rules.Mag.Mana != 0f;
-        }
     }
 
     internal static class AttributeReinforceRuntime
@@ -306,7 +292,6 @@ namespace LongYinAttrReinforceMod
         private const float FloatEpsilon = 0.0001f;
         private const int MaxHpAddType = 57;
         private const int MaxManaAddType = 59;
-
         private static readonly (string Key, int Index)[] BaseAttrs =
         {
             ("Str", 0),
@@ -317,14 +302,9 @@ namespace LongYinAttrReinforceMod
             ("Mag", 5)
         };
 
-        public static void ApplyReinforceToCountedHero(HeroData hero, ResourceRatioSnapshot snapshot)
+        public static void ApplyReinforceToCountedHero(HeroData hero, ResourceStateSnapshot snapshot)
         {
             if (hero == null || hero.isSummon || hero.totalAddData == null)
-            {
-                return;
-            }
-
-            if (ReinforceConfig.IsCurrentRuleAllZero)
             {
                 return;
             }
@@ -336,18 +316,19 @@ namespace LongYinAttrReinforceMod
                 return;
             }
 
-            if (Math.Abs(extraMaxHp) > FloatEpsilon)
-            {
-                hero.totalAddData.Change(MaxHpAddType, extraMaxHp);
-            }
+            float vanillaHp = hero.hp;
+            float vanillaMana = hero.mana;
+            float vanillaRealMaxHp = hero.realMaxHp;
+            float vanillaRealMaxMana = hero.realMaxMana;
 
-            if (Math.Abs(extraMaxMana) > FloatEpsilon)
-            {
-                hero.totalAddData.Change(MaxManaAddType, extraMaxMana);
-            }
-
-            RecalculateHeroResource(hero);
-            RestoreCurrentResourceByRatio(hero, snapshot, Math.Abs(extraMaxHp) > FloatEpsilon, Math.Abs(extraMaxMana) > FloatEpsilon);
+            RecalculateHeroResource(hero, extraMaxHp, extraMaxMana);
+            RestoreCurrentResourceByRatio(
+                hero,
+                snapshot,
+                vanillaHp,
+                vanillaMana,
+                vanillaRealMaxHp,
+                vanillaRealMaxMana);
         }
 
         private static float CalculateExtraMaxHp(HeroData hero)
@@ -371,10 +352,7 @@ namespace LongYinAttrReinforceMod
             foreach ((string key, int index) in BaseAttrs)
             {
                 float attriValue = GetAttriValue(hero, index);
-                if (Math.Abs(attriValue) > FloatEpsilon)
-                {
-                    total += attriValue * selector(key);
-                }
+                total += attriValue * selector(key);
             }
 
             return total;
@@ -382,25 +360,23 @@ namespace LongYinAttrReinforceMod
 
         private static float GetAttriValue(HeroData hero, int index)
         {
-            float listValue = GetListValue(hero.totalAttri, index);
-            if (Math.Abs(listValue) > FloatEpsilon)
+            if (HasListIndex(hero.totalAttri, index))
             {
-                return listValue;
+                return GetListValue(hero.totalAttri, index);
             }
 
-            listValue = GetListValue(hero.baseAttri, index);
-            if (Math.Abs(listValue) > FloatEpsilon)
+            if (HasListIndex(hero.baseAttri, index))
             {
-                return listValue;
+                return GetListValue(hero.baseAttri, index);
             }
 
             return GetListValue(hero.maxAttri, index);
         }
 
-        private static void RecalculateHeroResource(HeroData hero)
+        private static void RecalculateHeroResource(HeroData hero, float extraMaxHp, float extraMaxMana)
         {
-            float maxHpAdd = hero.totalAddData.Get(MaxHpAddType);
-            float maxManaAdd = hero.totalAddData.Get(MaxManaAddType);
+            float maxHpAdd = hero.totalAddData.Get(MaxHpAddType) + extraMaxHp;
+            float maxManaAdd = hero.totalAddData.Get(MaxManaAddType) + extraMaxMana;
             float hpRate = 1f + GetListValue(hero.totalFightSkill, 2) * 0.01f;
             float manaRate = 1f + GetListValue(hero.totalFightSkill, 0) * 0.01f;
 
@@ -413,22 +389,102 @@ namespace LongYinAttrReinforceMod
             hero.mana = Clamp(hero.mana, 0f, hero.realMaxMana);
         }
 
-        private static void RestoreCurrentResourceByRatio(HeroData hero, ResourceRatioSnapshot snapshot, bool hpChanged, bool manaChanged)
+        private static void RestoreCurrentResourceByRatio(
+            HeroData hero,
+            ResourceStateSnapshot snapshot,
+            float vanillaHp,
+            float vanillaMana,
+            float vanillaRealMaxHp,
+            float vanillaRealMaxMana)
         {
-            if (hero == null)
+            if (hero == null || !snapshot.HasValue)
             {
                 return;
             }
 
-            if (hpChanged && snapshot.HasHpRatio)
+            hero.hp = RestoreCurrentValueByRatio(snapshot.Hp, snapshot.RealMaxHp, vanillaHp, vanillaRealMaxHp, hero.realMaxHp);
+            hero.mana = RestoreCurrentValueByRatio(snapshot.Mana, snapshot.RealMaxMana, vanillaMana, vanillaRealMaxMana, hero.realMaxMana);
+        }
+
+        private static float RestoreCurrentValueByRatio(
+            float oldCurrent,
+            float oldMax,
+            float vanillaCurrent,
+            float vanillaMax,
+            float newMax)
+        {
+            if (newMax <= FloatEpsilon)
             {
-                hero.hp = Clamp(hero.realMaxHp * snapshot.HpRatio, 0f, hero.realMaxHp);
+                return 0f;
             }
 
-            if (manaChanged && snapshot.HasManaRatio)
+            if (vanillaMax > FloatEpsilon)
             {
-                hero.mana = Clamp(hero.realMaxMana * snapshot.ManaRatio, 0f, hero.realMaxMana);
+                // 原版 CountHeroData 会先清空并重建 totalAddData，再按新上限 Clamp 当前值。
+                // 因此这里优先保留“原版这次计算后的缺口”，只补回我们额外抬高的上限差值。
+                float clampedVanillaCurrent = Clamp(vanillaCurrent, 0f, vanillaMax);
+                float vanillaMissing = vanillaMax - clampedVanillaCurrent;
+                return Clamp(newMax - vanillaMissing, 0f, newMax);
             }
+
+            if (oldMax > FloatEpsilon)
+            {
+                float ratio = Clamp(oldCurrent / oldMax, 0f, 1f);
+                return Clamp(newMax * ratio, 0f, newMax);
+            }
+
+            return newMax;
+        }
+
+        public static void FillGeneratedHeroCurrentResources(HeroData hero)
+        {
+            if (hero == null || hero.isSummon)
+            {
+                return;
+            }
+
+            if (hero.realMaxHp > FloatEpsilon)
+            {
+                hero.hp = hero.realMaxHp;
+            }
+            else if (hero.maxhp > FloatEpsilon)
+            {
+                hero.hp = hero.maxhp;
+            }
+
+            if (hero.realMaxMana > FloatEpsilon)
+            {
+                hero.mana = hero.realMaxMana;
+            }
+            else if (hero.maxMana > FloatEpsilon)
+            {
+                hero.mana = hero.maxMana;
+            }
+        }
+
+        public static void RefreshNewGamePlayerCurrentResources(GameController controller)
+        {
+            if (controller == null || controller.worldData == null)
+            {
+                return;
+            }
+
+            HeroData player;
+            try
+            {
+                player = controller.worldData.Player();
+            }
+            catch
+            {
+                return;
+            }
+
+            if (player == null || player.isSummon)
+            {
+                return;
+            }
+
+            FillGeneratedHeroCurrentResources(player);
         }
 
         private static float Clamp(float value, float min, float max)
@@ -474,6 +530,11 @@ namespace LongYinAttrReinforceMod
             }
         }
 
+        private static bool HasListIndex(object list, int index)
+        {
+            return index >= 0 && index < GetListCount(list);
+        }
+
         private static float GetListValue(object list, int index)
         {
             if (list == null)
@@ -509,69 +570,87 @@ namespace LongYinAttrReinforceMod
         }
     }
 
-    internal readonly struct ResourceRatioSnapshot
+    internal readonly struct ResourceStateSnapshot
     {
-        public ResourceRatioSnapshot(bool hasHpRatio, float hpRatio, bool hasManaRatio, float manaRatio)
+        public ResourceStateSnapshot(
+            float hp,
+            float mana,
+            float realMaxHp,
+            float realMaxMana)
         {
-            HasHpRatio = hasHpRatio;
-            HpRatio = hpRatio;
-            HasManaRatio = hasManaRatio;
-            ManaRatio = manaRatio;
+            Hp = hp;
+            Mana = mana;
+            RealMaxHp = realMaxHp;
+            RealMaxMana = realMaxMana;
+            HasValue = true;
         }
 
-        public bool HasHpRatio { get; }
+        public float Hp { get; }
 
-        public float HpRatio { get; }
+        public float Mana { get; }
 
-        public bool HasManaRatio { get; }
+        public float RealMaxHp { get; }
 
-        public float ManaRatio { get; }
+        public float RealMaxMana { get; }
+
+        public bool HasValue { get; }
     }
 
     [HarmonyPatch(typeof(GameController), "CountHeroData")]
     internal static class ReinforceCountHeroDataPatch
     {
         [HarmonyPrefix]
-        public static void Prefix(HeroData hero, out ResourceRatioSnapshot __state)
-        {
-            __state = CaptureRatioSnapshot(hero);
-        }
-
-        [HarmonyPostfix]
-        public static void Postfix(HeroData hero, ResourceRatioSnapshot __state)
-        {
-            AttributeReinforceRuntime.ApplyReinforceToCountedHero(hero, __state);
-        }
-
-        private static ResourceRatioSnapshot CaptureRatioSnapshot(HeroData hero)
+        public static void Prefix(HeroData hero, out ResourceStateSnapshot __state)
         {
             if (hero == null)
             {
-                return default;
+                __state = default;
+                return;
             }
 
-            bool hasHpRatio = hero.realMaxHp > 0.0001f;
-            float hpRatio = hasHpRatio ? ClampRatio(hero.hp / hero.realMaxHp) : 0f;
-
-            bool hasManaRatio = hero.realMaxMana > 0.0001f;
-            float manaRatio = hasManaRatio ? ClampRatio(hero.mana / hero.realMaxMana) : 0f;
-
-            return new ResourceRatioSnapshot(hasHpRatio, hpRatio, hasManaRatio, manaRatio);
+            __state = new ResourceStateSnapshot(
+                hero.hp,
+                hero.mana,
+                hero.realMaxHp,
+                hero.realMaxMana);
         }
 
-        private static float ClampRatio(float value)
+        [HarmonyPostfix]
+        public static void Postfix(HeroData hero, ResourceStateSnapshot __state)
         {
-            if (value < 0f)
-            {
-                return 0f;
-            }
-
-            if (value > 1f)
-            {
-                return 1f;
-            }
-
-            return value;
+            AttributeReinforceRuntime.ApplyReinforceToCountedHero(hero, __state);
         }
     }
+
+    [HarmonyPatch(typeof(GameController), "GenerateHeroData", new Type[]
+    {
+        typeof(string),
+        typeof(int),
+        typeof(int),
+        typeof(float),
+        typeof(HeroData),
+        typeof(bool),
+        typeof(SexLimit),
+        typeof(bool),
+        typeof(bool)
+    })]
+    internal static class ReinforceGenerateHeroDataPatch
+    {
+        [HarmonyPostfix]
+        public static void Postfix(HeroData __result)
+        {
+            AttributeReinforceRuntime.FillGeneratedHeroCurrentResources(__result);
+        }
+    }
+
+    [HarmonyPatch(typeof(GameController), "StartNewGameSetting")]
+    internal static class ReinforceStartNewGameSettingPatch
+    {
+        [HarmonyPostfix]
+        public static void Postfix(GameController __instance)
+        {
+            AttributeReinforceRuntime.RefreshNewGamePlayerCurrentResources(__instance);
+        }
+    }
+
 }
