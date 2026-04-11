@@ -11,21 +11,35 @@ using Il2CppInterop.Runtime;
 using MelonLoader;
 using UnityEngine;
 
-[assembly: MelonInfo(typeof(LongYinCustomSpeHeroData.Main), "LongYinCustomSpeHeroData", "1.1.0", "SaintCirno9", null)]
+[assembly: MelonInfo(typeof(LongYinCustomSpeHeroData.Main), "LongYinCustomSpeHeroData", "2.0.0", "SaintCirno9", null)]
 [assembly: MelonGame("TppStudio", "LongYinLiZhiZhuan")]
 
 namespace LongYinCustomSpeHeroData
 {
     internal sealed class LoadedConfigData
     {
-        public static readonly LoadedConfigData Empty = new(false, string.Empty, 0, new HashSet<int>());
+        public static readonly LoadedConfigData Empty = new(
+            false,
+            string.Empty,
+            0,
+            new Dictionary<int, PortraitBindingInfo>(),
+            new Dictionary<string, PortraitBindingInfo>(StringComparer.OrdinalIgnoreCase),
+            string.Empty);
 
-        public LoadedConfigData(bool valid, string csvText, int rowCount, HashSet<int> heroIds)
+        public LoadedConfigData(
+            bool valid,
+            string csvText,
+            int rowCount,
+            Dictionary<int, PortraitBindingInfo> bindingsByHeroId,
+            Dictionary<string, PortraitBindingInfo> bindingsByNormalizedName,
+            string cacheSignature)
         {
             Valid = valid;
-            CsvText = csvText;
+            CsvText = csvText ?? string.Empty;
             RowCount = rowCount;
-            HeroIds = heroIds ?? new HashSet<int>();
+            BindingsByHeroId = bindingsByHeroId ?? new Dictionary<int, PortraitBindingInfo>();
+            BindingsByNormalizedName = bindingsByNormalizedName ?? new Dictionary<string, PortraitBindingInfo>(StringComparer.OrdinalIgnoreCase);
+            CacheSignature = cacheSignature ?? string.Empty;
         }
 
         public bool Valid { get; }
@@ -34,7 +48,11 @@ namespace LongYinCustomSpeHeroData
 
         public int RowCount { get; }
 
-        public HashSet<int> HeroIds { get; }
+        public Dictionary<int, PortraitBindingInfo> BindingsByHeroId { get; }
+
+        public Dictionary<string, PortraitBindingInfo> BindingsByNormalizedName { get; }
+
+        public string CacheSignature { get; }
     }
 
     internal sealed class MergeResult
@@ -61,18 +79,30 @@ namespace LongYinCustomSpeHeroData
     public class Main : MelonMod
     {
         internal static readonly string ConfigDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "UserData", "LongYinCustomSpeHeroData");
+        internal static readonly string DataDir = Path.Combine(ConfigDir, "Data");
+        internal static readonly string PortraitsDir = Path.Combine(ConfigDir, "Portraits");
         internal static readonly string ModConfigPath = Path.Combine(ConfigDir, "LongYinCustomSpeHeroData.cfg");
-        internal static readonly string SpeHeroConfigPath = Path.Combine(ConfigDir, "SpeHeroData.csv");
-        internal static readonly string SpeHeroFaceConfigPath = Path.Combine(ConfigDir, "SpeHeroFaceData.csv");
+        internal static readonly string LegacySpeHeroConfigPath = Path.Combine(ConfigDir, "SpeHeroData.csv");
+        internal static readonly string LegacySpeHeroFaceConfigPath = Path.Combine(ConfigDir, "SpeHeroFaceData.csv");
         internal static readonly string VanillaSpeHeroExportPath = Path.Combine(ConfigDir, "Vanilla_SpeHeroData.csv");
         internal static readonly string VanillaSpeHeroFaceExportPath = Path.Combine(ConfigDir, "Vanilla_SpeHeroFaceData.csv");
+        internal static readonly string SamplePackDir = Path.Combine(DataDir, "000");
+        internal static readonly string SamplePackPortraitsDir = Path.Combine(SamplePackDir, "Portraits");
+        internal static readonly string SamplePackSpeHeroConfigPath = Path.Combine(SamplePackDir, "SpeHeroData.csv");
+        internal static readonly string SamplePackSpeHeroFaceConfigPath = Path.Combine(SamplePackDir, "SpeHeroFaceData.csv");
+        internal static readonly string LegacyPortraitLayoutConfigPath = Path.Combine(ConfigDir, "PortraitLayout.csv");
+        internal static readonly string SamplePackPortraitLayoutConfigPath = Path.Combine(SamplePackDir, "PortraitLayout.csv");
 
+        private const string SpeHeroFileName = "SpeHeroData.csv";
+        private const string SpeHeroFaceFileName = "SpeHeroFaceData.csv";
+        private const string PortraitLayoutFileName = "PortraitLayout.csv";
         private const string SpeHeroResourcePath = "GameData/SpeHeroData";
         private const string SpeHeroFaceResourcePath = "GameData/SpeHeroFaceData";
         private const string RecruitAllSpeHeroesConfigKey = "EnableRecruitAllSpeHeroes";
 
         private const string SpeHeroHeader = "id,名字,性别,门派,武学流派,等级,实力等级,性格,资质,年龄,立场,擅长武学,擅长技艺,绝学,标签,绰号,隐藏,出师角色,关系设定,皮肤ID,特殊skeleton";
         private const string SpeHeroFaceHeader = "id,名字,脸,眼,眉,发,嘴,鼻,发后,男胡,杂";
+        private const string PortraitLayoutHeader = "id,详情缩放,详情偏移X,详情偏移Y,卡片缩放,卡片偏移X,卡片偏移Y,通用缩放,通用偏移X,通用偏移Y";
         private const string DefaultModConfigText =
             "# 是否允许所有特殊人物可招募\r\n" +
             "# true=允许，false=保持游戏原版逻辑\r\n" +
@@ -86,14 +116,25 @@ namespace LongYinCustomSpeHeroData
             SpeHeroFaceHeader + "\r\n" +
             "171,姜.映潭,1,10,10,10,10,10,10,0,-1\r\n";
 
+        private static readonly string DefaultPortraitLayoutCsv =
+            PortraitLayoutHeader + "\r\n" +
+            "171,1.00,0,-90,0.90,-10,-20,1.00,0,0\r\n";
+
         private static LoadedConfigData _cachedSpeHeroConfig = LoadedConfigData.Empty;
-        private static DateTime _cachedSpeHeroConfigWriteTimeUtc = DateTime.MinValue;
         private static LoadedConfigData _cachedSpeHeroFaceConfig = LoadedConfigData.Empty;
-        private static DateTime _cachedSpeHeroFaceConfigWriteTimeUtc = DateTime.MinValue;
         private static bool _cachedEnableRecruitAllSpeHeroes = true;
         private static DateTime _cachedModConfigWriteTimeUtc = DateTime.MinValue;
         private static bool _exportedVanillaSpeHeroData;
         private static bool _exportedVanillaSpeHeroFaceData;
+        private static string _cachedPortraitBindingSignature = string.Empty;
+        private static Dictionary<int, PortraitBindingInfo> _cachedPortraitBindingsByHeroId = new();
+        private static Dictionary<string, PortraitBindingInfo> _cachedPortraitBindingsByNormalizedName = new(StringComparer.OrdinalIgnoreCase);
+        private static Dictionary<int, string> _cachedPortraitPathsBySourceHeroId = new();
+        private static LoadedPortraitLayoutData _cachedPortraitLayoutData = LoadedPortraitLayoutData.Empty;
+        private static readonly Dictionary<int, PortraitSpriteCacheEntry> CachedPortraitSpritesByHeroId = new();
+        private static readonly HashSet<string> PortraitWarnings = new(StringComparer.OrdinalIgnoreCase);
+        private static readonly HashSet<int> PortraitAppliedLogHeroIds = new();
+        private static bool _legacyStructureWarningShown;
 
         public static readonly MelonLogger.Instance LOG = Melon<Main>.Logger;
 
@@ -109,6 +150,7 @@ namespace LongYinCustomSpeHeroData
             try
             {
                 Directory.CreateDirectory(ConfigDir);
+                Directory.CreateDirectory(DataDir);
 
                 if (!File.Exists(ModConfigPath))
                 {
@@ -116,29 +158,117 @@ namespace LongYinCustomSpeHeroData
                     LOG.Msg($"已生成默认配置：{ModConfigPath}");
                 }
 
-                if (!File.Exists(SpeHeroConfigPath))
+                bool hasLegacyConfig =
+                    File.Exists(LegacySpeHeroConfigPath) ||
+                    File.Exists(LegacySpeHeroFaceConfigPath) ||
+                    Directory.Exists(PortraitsDir);
+
+                if (hasLegacyConfig)
                 {
-                    File.WriteAllText(SpeHeroConfigPath, DefaultSpeHeroCsv, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
-                    LOG.Msg($"已生成默认配置：{SpeHeroConfigPath}");
+                    Directory.CreateDirectory(SamplePackDir);
+                    Directory.CreateDirectory(SamplePackPortraitsDir);
+
+                    if (!_legacyStructureWarningShown)
+                    {
+                        _legacyStructureWarningShown = true;
+                        LOG.Warning(
+                            "检测到旧版根目录配置结构，当前版本仍会兼容读取。新版建议路径：" +
+                            " CSV -> UserData\\LongYinCustomSpeHeroData\\Data\\000\\SpeHeroData.csv / SpeHeroFaceData.csv；" +
+                            " 图片 -> UserData\\LongYinCustomSpeHeroData\\Data\\000\\Portraits");
+                    }
                 }
-                else
+                else if (!HasAnyDataPackConfig())
                 {
-                    EnsureCsvHeaderExists(SpeHeroConfigPath, SpeHeroHeader);
+                    Directory.CreateDirectory(SamplePackDir);
+                    Directory.CreateDirectory(SamplePackPortraitsDir);
+                    File.WriteAllText(SamplePackSpeHeroConfigPath, DefaultSpeHeroCsv, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
+                    File.WriteAllText(SamplePackSpeHeroFaceConfigPath, DefaultSpeHeroFaceCsv, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
+                    File.WriteAllText(SamplePackPortraitLayoutConfigPath, DefaultPortraitLayoutCsv, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
+                    LOG.Msg($"未检测到任何特殊人物配置，已自动生成示例配置：{SamplePackSpeHeroConfigPath}");
+                    LOG.Msg($"已自动生成示例配置：{SamplePackSpeHeroFaceConfigPath}");
+                    LOG.Msg($"已自动生成示例配置：{SamplePackPortraitLayoutConfigPath}");
+                    LOG.Msg("已同时创建示例立绘目录：UserData\\LongYinCustomSpeHeroData\\Data\\000\\Portraits");
                 }
 
-                if (!File.Exists(SpeHeroFaceConfigPath))
-                {
-                    File.WriteAllText(SpeHeroFaceConfigPath, DefaultSpeHeroFaceCsv, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
-                    LOG.Msg($"已生成默认配置：{SpeHeroFaceConfigPath}");
-                }
-                else
-                {
-                    EnsureCsvHeaderExists(SpeHeroFaceConfigPath, SpeHeroFaceHeader);
-                }
+                EnsureExistingCsvHeaders();
             }
             catch (Exception ex)
             {
                 LOG.Error($"准备配置文件失败：{ex}");
+            }
+        }
+
+        private static bool HasAnyDataPackConfig()
+        {
+            if (!Directory.Exists(DataDir))
+            {
+                return false;
+            }
+
+            foreach (string dir in Directory.GetDirectories(DataDir))
+            {
+                string dirName = Path.GetFileName(dir);
+                if (!int.TryParse(dirName, NumberStyles.Integer, CultureInfo.InvariantCulture, out _))
+                {
+                    continue;
+                }
+
+                if (File.Exists(Path.Combine(dir, SpeHeroFileName)) || File.Exists(Path.Combine(dir, SpeHeroFaceFileName)))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static void EnsureExistingCsvHeaders()
+        {
+            if (File.Exists(LegacySpeHeroConfigPath))
+            {
+                EnsureCsvHeaderExists(LegacySpeHeroConfigPath, SpeHeroHeader);
+            }
+
+            if (File.Exists(LegacySpeHeroFaceConfigPath))
+            {
+                EnsureCsvHeaderExists(LegacySpeHeroFaceConfigPath, SpeHeroFaceHeader);
+            }
+
+            if (File.Exists(LegacyPortraitLayoutConfigPath))
+            {
+                EnsureCsvHeaderExists(LegacyPortraitLayoutConfigPath, PortraitLayoutHeader);
+            }
+
+            if (!Directory.Exists(DataDir))
+            {
+                return;
+            }
+
+            foreach (string dir in Directory.GetDirectories(DataDir))
+            {
+                string dirName = Path.GetFileName(dir);
+                if (!int.TryParse(dirName, NumberStyles.Integer, CultureInfo.InvariantCulture, out _))
+                {
+                    continue;
+                }
+
+                string speHeroPath = Path.Combine(dir, SpeHeroFileName);
+                if (File.Exists(speHeroPath))
+                {
+                    EnsureCsvHeaderExists(speHeroPath, SpeHeroHeader);
+                }
+
+                string speHeroFacePath = Path.Combine(dir, SpeHeroFaceFileName);
+                if (File.Exists(speHeroFacePath))
+                {
+                    EnsureCsvHeaderExists(speHeroFacePath, SpeHeroFaceHeader);
+                }
+
+                string portraitLayoutPath = Path.Combine(dir, PortraitLayoutFileName);
+                if (File.Exists(portraitLayoutPath))
+                {
+                    EnsureCsvHeaderExists(portraitLayoutPath, PortraitLayoutHeader);
+                }
             }
         }
 
@@ -270,100 +400,329 @@ namespace LongYinCustomSpeHeroData
         internal static LoadedConfigData LoadSpeHeroConfig()
         {
             return LoadConfig(
-                SpeHeroConfigPath,
+                SpeHeroFileName,
+                SpeHeroHeader,
                 new[] { "id", "名字", "性别" },
-                ref _cachedSpeHeroConfig,
-                ref _cachedSpeHeroConfigWriteTimeUtc);
+                ref _cachedSpeHeroConfig);
         }
 
         internal static LoadedConfigData LoadSpeHeroFaceConfig()
         {
             return LoadConfig(
-                SpeHeroFaceConfigPath,
+                SpeHeroFaceFileName,
+                SpeHeroFaceHeader,
                 new[] { "id", "名字" },
-                ref _cachedSpeHeroFaceConfig,
-                ref _cachedSpeHeroFaceConfigWriteTimeUtc);
+                ref _cachedSpeHeroFaceConfig);
         }
 
-        private static LoadedConfigData LoadConfig(
-            string path,
-            string[] requiredHeaders,
-            ref LoadedConfigData cachedConfig,
-            ref DateTime cachedWriteTimeUtc)
+        internal static LoadedPortraitLayoutData LoadPortraitLayoutConfig()
         {
             EnsureConfigExists();
 
-            if (!File.Exists(path))
+            try
             {
-                LOG.Warning($"配置文件不存在：{path}");
-                return LoadedConfigData.Empty;
+                List<ConfigSource> sources = CollectConfigSources();
+                string cacheSignature = BuildConfigCacheSignature(sources, PortraitLayoutFileName);
+                if (string.Equals(_cachedPortraitLayoutData.CacheSignature, cacheSignature, StringComparison.Ordinal))
+                {
+                    return _cachedPortraitLayoutData;
+                }
+
+                var layoutsByHeroId = new Dictionary<int, PortraitLayoutConfig>();
+                foreach (ConfigSource source in sources)
+                {
+                    string path = source.GetCsvPath(PortraitLayoutFileName);
+                    if (!File.Exists(path))
+                    {
+                        continue;
+                    }
+
+                    string[] lines = ReadAllLinesShared(path);
+                    if (lines.Length <= 1)
+                    {
+                        continue;
+                    }
+
+                    string[] headers = SplitCsvLine(lines[0]);
+                    for (int i = 0; i < headers.Length; i++)
+                    {
+                        headers[i] = headers[i].Trim('\uFEFF', ' ', '\t');
+                    }
+
+                    if (!ValidateHeaders(headers, new[] { "id" }, path))
+                    {
+                        continue;
+                    }
+
+                    int idColumnIndex = FindColumnIndex(headers, "id");
+                    var seenIdsInSource = new HashSet<int>();
+                    for (int i = 1; i < lines.Length; i++)
+                    {
+                        string line = lines[i].Trim();
+                        if (string.IsNullOrWhiteSpace(line) || line.StartsWith('#'))
+                        {
+                            continue;
+                        }
+
+                        string[] cells = SplitCsvLine(line);
+                        string idText = GetCell(cells, idColumnIndex);
+                        if (!int.TryParse(idText, NumberStyles.Integer, CultureInfo.InvariantCulture, out int heroId))
+                        {
+                            LOG.Warning($"[{source.SourceName}] 立绘布局第 {i + 1} 行 id 非法，已跳过：{line}");
+                            continue;
+                        }
+
+                        if (!seenIdsInSource.Add(heroId))
+                        {
+                            LOG.Warning($"[{source.SourceName}] 立绘布局第 {i + 1} 行特殊人物 id={heroId} 重复，已跳过。");
+                            continue;
+                        }
+
+                        layoutsByHeroId[heroId] = BuildPortraitLayoutConfig(headers, cells);
+                    }
+                }
+
+                _cachedPortraitLayoutData = new LoadedPortraitLayoutData(layoutsByHeroId, cacheSignature);
+                return _cachedPortraitLayoutData;
             }
+            catch (Exception ex)
+            {
+                LOG.Error($"读取立绘布局配置失败：{PortraitLayoutFileName}，{ex}");
+                return LoadedPortraitLayoutData.Empty;
+            }
+        }
+
+        internal static bool TryGetPortraitLayoutConfig(int heroId, out PortraitLayoutConfig config)
+        {
+            LoadedPortraitLayoutData data = LoadPortraitLayoutConfig();
+            return data.LayoutsByHeroId.TryGetValue(heroId, out config);
+        }
+
+        internal static bool TryGetPortraitLayoutConfig(HeroData heroData, out PortraitLayoutConfig config)
+        {
+            config = null;
+            if (heroData == null)
+            {
+                return false;
+            }
+
+            if (TryResolvePortraitBinding(heroData, out PortraitBindingInfo binding))
+            {
+                return TryGetPortraitLayoutConfig(binding.SourceHeroId, out config);
+            }
+
+            return TryGetPortraitLayoutConfig(heroData.heroID, out config);
+        }
+
+        internal static List<ConfigSource> CollectConfigSources()
+        {
+            var sources = new List<ConfigSource>();
+
+            if (File.Exists(LegacySpeHeroConfigPath) || File.Exists(LegacySpeHeroFaceConfigPath) || File.Exists(LegacyPortraitLayoutConfigPath) || Directory.Exists(PortraitsDir))
+            {
+                sources.Add(new ConfigSource(
+                    "根目录",
+                    ConfigDir,
+                    Path.Combine("UserData", "LongYinCustomSpeHeroData"),
+                    0));
+            }
+
+            if (!Directory.Exists(DataDir))
+            {
+                return sources;
+            }
+
+            foreach (string dir in Directory.GetDirectories(DataDir)
+                         .OrderBy(path => int.TryParse(Path.GetFileName(path), NumberStyles.Integer, CultureInfo.InvariantCulture, out int order) ? order : int.MaxValue)
+                         .ThenBy(path => path, StringComparer.OrdinalIgnoreCase))
+            {
+                string dirName = Path.GetFileName(dir);
+                if (!int.TryParse(dirName, NumberStyles.Integer, CultureInfo.InvariantCulture, out int order))
+                {
+                    continue;
+                }
+
+                bool hasSupportedCsv =
+                    File.Exists(Path.Combine(dir, SpeHeroFileName)) ||
+                    File.Exists(Path.Combine(dir, SpeHeroFaceFileName)) ||
+                    File.Exists(Path.Combine(dir, PortraitLayoutFileName));
+                if (!hasSupportedCsv)
+                {
+                    continue;
+                }
+
+                sources.Add(new ConfigSource(
+                    $"Data/{dirName}",
+                    dir,
+                    Path.Combine("UserData", "LongYinCustomSpeHeroData", "Data", dirName),
+                    order));
+            }
+
+            return sources;
+        }
+
+        private static string BuildConfigCacheSignature(IEnumerable<ConfigSource> sources, string fileName)
+        {
+            if (sources == null)
+            {
+                return string.Empty;
+            }
+
+            return string.Join(
+                "|",
+                sources
+                    .Select(source => source.GetCsvPath(fileName))
+                    .Where(File.Exists)
+                    .Select(path =>
+                    {
+                        var fileInfo = new FileInfo(path);
+                        return $"{path}:{fileInfo.Length}:{fileInfo.LastWriteTimeUtc.Ticks}";
+                    }));
+        }
+
+        private static LoadedConfigData LoadConfig(
+            string fileName,
+            string canonicalHeaderLine,
+            string[] requiredHeaders,
+            ref LoadedConfigData cachedConfig)
+        {
+            EnsureConfigExists();
 
             try
             {
-                DateTime lastWriteTimeUtc = File.GetLastWriteTimeUtc(path);
-                if (cachedConfig.Valid && cachedWriteTimeUtc == lastWriteTimeUtc)
+                List<ConfigSource> sources = CollectConfigSources();
+                string cacheSignature = BuildConfigCacheSignature(sources, fileName);
+                if (cachedConfig.Valid &&
+                    string.Equals(cachedConfig.CacheSignature, cacheSignature, StringComparison.Ordinal))
                 {
                     return cachedConfig;
                 }
 
-                string[] lines = ReadAllLinesShared(path);
-                if (lines.Length <= 1)
-                {
-                    LOG.Warning($"配置文件为空：{path}");
-                    cachedConfig = LoadedConfigData.Empty;
-                    cachedWriteTimeUtc = lastWriteTimeUtc;
-                    return cachedConfig;
-                }
+                string[] canonicalHeaders = SplitCsvLine(canonicalHeaderLine);
+                var rowsById = new Dictionary<int, string>();
+                var bindingsByHeroId = new Dictionary<int, PortraitBindingInfo>();
+                var bindingsByNormalizedName = new Dictionary<string, PortraitBindingInfo>(StringComparer.OrdinalIgnoreCase);
 
-                string[] headers = SplitCsvLine(lines[0]);
-                for (int i = 0; i < headers.Length; i++)
+                foreach (ConfigSource source in sources)
                 {
-                    headers[i] = headers[i].Trim('\uFEFF', ' ', '\t');
-                }
-
-                if (!ValidateHeaders(headers, requiredHeaders, path))
-                {
-                    cachedConfig = LoadedConfigData.Empty;
-                    cachedWriteTimeUtc = lastWriteTimeUtc;
-                    return cachedConfig;
-                }
-
-                int rowCount = 0;
-                int idColumnIndex = FindColumnIndex(headers, "id");
-                var heroIds = new HashSet<int>();
-                for (int i = 1; i < lines.Length; i++)
-                {
-                    string line = lines[i].Trim();
-                    if (string.IsNullOrWhiteSpace(line) || line.StartsWith('#'))
+                    string path = source.GetCsvPath(fileName);
+                    if (!File.Exists(path))
                     {
                         continue;
                     }
 
-                    rowCount++;
+                    string[] lines = ReadAllLinesShared(path);
+                    if (lines.Length <= 1)
+                    {
+                        LOG.Warning($"配置文件为空，已跳过：{path}");
+                        continue;
+                    }
 
-                    if (idColumnIndex < 0)
+                    string[] headers = SplitCsvLine(lines[0]);
+                    for (int i = 0; i < headers.Length; i++)
+                    {
+                        headers[i] = headers[i].Trim('\uFEFF', ' ', '\t');
+                    }
+
+                    if (!ValidateHeaders(headers, requiredHeaders, path))
                     {
                         continue;
                     }
 
-                    string[] cells = SplitCsvLine(line);
-                    string idText = GetCell(cells, idColumnIndex);
-                    if (int.TryParse(idText, NumberStyles.Integer, CultureInfo.InvariantCulture, out int heroId))
+                    int idColumnIndex = FindColumnIndex(headers, "id");
+                    int nameColumnIndex = FindColumnIndex(headers, "名字");
+                    var seenIdsInSource = new HashSet<int>();
+
+                    for (int i = 1; i < lines.Length; i++)
                     {
-                        heroIds.Add(heroId);
+                        string line = lines[i].Trim();
+                        if (string.IsNullOrWhiteSpace(line) || line.StartsWith('#'))
+                        {
+                            continue;
+                        }
+
+                        string[] cells = SplitCsvLine(line);
+                        string idText = GetCell(cells, idColumnIndex);
+                        if (!int.TryParse(idText, NumberStyles.Integer, CultureInfo.InvariantCulture, out int heroId))
+                        {
+                            LOG.Warning($"[{source.SourceName}] 第 {i + 1} 行 id 非法，已跳过：{line}");
+                            continue;
+                        }
+
+                        if (!seenIdsInSource.Add(heroId))
+                        {
+                            LOG.Warning($"[{source.SourceName}] 第 {i + 1} 行特殊人物 id={heroId} 重复，已跳过。");
+                            continue;
+                        }
+
+                        rowsById[heroId] = NormalizeCsvRow(canonicalHeaders, headers, cells);
+                        string heroName = GetCell(cells, nameColumnIndex);
+                        string normalizedHeroName = NormalizeHeroName(heroName);
+                        var binding = new PortraitBindingInfo(heroId, heroName, normalizedHeroName, source.CreatePortraitOrigin(path));
+                        bindingsByHeroId[heroId] = binding;
+                        if (!string.IsNullOrWhiteSpace(normalizedHeroName))
+                        {
+                            bindingsByNormalizedName[normalizedHeroName] = binding;
+                        }
                     }
                 }
 
-                cachedConfig = new LoadedConfigData(true, string.Join("\r\n", lines), rowCount, heroIds);
-                cachedWriteTimeUtc = lastWriteTimeUtc;
+                if (rowsById.Count == 0)
+                {
+                    cachedConfig = new LoadedConfigData(
+                        false,
+                        string.Empty,
+                        0,
+                        new Dictionary<int, PortraitBindingInfo>(),
+                        new Dictionary<string, PortraitBindingInfo>(StringComparer.OrdinalIgnoreCase),
+                        cacheSignature);
+                    return cachedConfig;
+                }
+
+                var outputLines = new List<string> { canonicalHeaderLine };
+                outputLines.AddRange(rowsById.OrderBy(pair => pair.Key).Select(pair => pair.Value));
+                cachedConfig = new LoadedConfigData(
+                    true,
+                    string.Join("\r\n", outputLines) + "\r\n",
+                    rowsById.Count,
+                    bindingsByHeroId,
+                    bindingsByNormalizedName,
+                    cacheSignature);
                 return cachedConfig;
             }
             catch (Exception ex)
             {
-                LOG.Error($"读取配置文件失败：{path}，{ex}");
+                LOG.Error($"读取配置文件失败：{fileName}，{ex}");
                 return LoadedConfigData.Empty;
             }
+        }
+
+        private static PortraitLayoutConfig BuildPortraitLayoutConfig(string[] headers, string[] cells)
+        {
+            return new PortraitLayoutConfig(
+                BuildPortraitSceneLayoutOverride(headers, cells, "详情"),
+                BuildPortraitSceneLayoutOverride(headers, cells, "卡片"),
+                BuildPortraitSceneLayoutOverride(headers, cells, "通用"));
+        }
+
+        private static PortraitSceneLayoutOverride BuildPortraitSceneLayoutOverride(string[] headers, string[] cells, string prefix)
+        {
+            return new PortraitSceneLayoutOverride(
+                ParseOptionalFloat(GetCell(cells, FindColumnIndex(headers, $"{prefix}缩放"))),
+                ParseOptionalFloat(GetCell(cells, FindColumnIndex(headers, $"{prefix}偏移X"))),
+                ParseOptionalFloat(GetCell(cells, FindColumnIndex(headers, $"{prefix}偏移Y"))));
+        }
+
+        private static float? ParseOptionalFloat(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return null;
+            }
+
+            return float.TryParse(value, NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out float parsed)
+                ? parsed
+                : null;
         }
 
         internal static MergeResult BuildMergedCsvText(string vanillaText, LoadedConfigData configData, string tableName)
@@ -456,6 +815,34 @@ namespace LongYinCustomSpeHeroData
                 : MergeResult.NoChange;
         }
 
+        private static string NormalizeCsvRow(string[] canonicalHeaders, string[] sourceHeaders, string[] sourceCells)
+        {
+            string[] normalizedCells = new string[canonicalHeaders.Length];
+            for (int i = 0; i < canonicalHeaders.Length; i++)
+            {
+                int sourceIndex = FindColumnIndex(sourceHeaders, canonicalHeaders[i]);
+                normalizedCells[i] = GetCell(sourceCells, sourceIndex);
+            }
+
+            return BuildCsvLine(normalizedCells);
+        }
+
+        internal static string BuildCsvLine(string[] cells)
+        {
+            return string.Join(",", cells.Select(EscapeCsvCell));
+        }
+
+        private static string EscapeCsvCell(string value)
+        {
+            string cell = value ?? string.Empty;
+            if (cell.IndexOfAny(new[] { ',', '"', '\r', '\n' }) >= 0)
+            {
+                return $"\"{cell.Replace("\"", "\"\"")}\"";
+            }
+
+            return cell;
+        }
+
         internal static string[] SplitCsvLine(string line)
         {
             var cells = new List<string>();
@@ -510,6 +897,26 @@ namespace LongYinCustomSpeHeroData
             return index >= 0 && index < cells.Length ? cells[index].Trim() : string.Empty;
         }
 
+        internal static string NormalizeHeroName(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return string.Empty;
+            }
+
+            return value
+                .Trim()
+                .Trim('\u3000')
+                .Replace(".", string.Empty, StringComparison.Ordinal)
+                .Replace("。", string.Empty, StringComparison.Ordinal)
+                .Replace("·", string.Empty, StringComparison.Ordinal)
+                .Replace("•", string.Empty, StringComparison.Ordinal)
+                .Replace("‧", string.Empty, StringComparison.Ordinal)
+                .Replace("・", string.Empty, StringComparison.Ordinal)
+                .Replace(" ", string.Empty, StringComparison.Ordinal)
+                .Replace("\t", string.Empty, StringComparison.Ordinal);
+        }
+
         internal static ref bool GetSpeHeroExportedFlagRef()
         {
             return ref _exportedVanillaSpeHeroData;
@@ -526,6 +933,314 @@ namespace LongYinCustomSpeHeroData
                    IsRecruitAllSpeHeroesEnabled() &&
                    targetHero.speHero &&
                    !targetHero.recruitAble;
+        }
+
+        internal static bool TryResolvePortraitBinding(HeroData heroData, out PortraitBindingInfo binding)
+        {
+            return TryResolvePortraitBinding(heroData, out binding, out _);
+        }
+
+        internal static bool TryResolvePortraitBinding(HeroData heroData, out PortraitBindingInfo binding, out string matchMode)
+        {
+            EnsurePortraitBindingsCurrent();
+            binding = null;
+            matchMode = "none";
+            if (heroData == null)
+            {
+                return false;
+            }
+
+            if (_cachedPortraitBindingsByHeroId.TryGetValue(heroData.heroID, out binding))
+            {
+                matchMode = "id";
+                return true;
+            }
+
+            string normalizedHeroName = NormalizeHeroName(heroData.heroName);
+            if (heroData.speHero &&
+                !string.IsNullOrWhiteSpace(normalizedHeroName) &&
+                _cachedPortraitBindingsByNormalizedName.TryGetValue(normalizedHeroName, out binding))
+            {
+                matchMode = "name";
+                return true;
+            }
+
+            return false;
+        }
+
+        private static void EnsurePortraitBindingsCurrent()
+        {
+            LoadedConfigData speHeroConfig = LoadSpeHeroConfig();
+            LoadedConfigData speHeroFaceConfig = LoadSpeHeroFaceConfig();
+            string bindingSignature = $"{speHeroConfig.CacheSignature}||{speHeroFaceConfig.CacheSignature}";
+            if (string.Equals(bindingSignature, _cachedPortraitBindingSignature, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            ResetPortraitSpriteCache();
+            PortraitWarnings.Clear();
+            PortraitAppliedLogHeroIds.Clear();
+
+            var bindings = new Dictionary<int, PortraitBindingInfo>();
+            var bindingsByNormalizedName = new Dictionary<string, PortraitBindingInfo>(StringComparer.OrdinalIgnoreCase);
+            var portraitPaths = new Dictionary<int, string>();
+            foreach (var pair in speHeroConfig.BindingsByHeroId.OrderBy(pair => pair.Key))
+            {
+                bindings[pair.Key] = pair.Value;
+            }
+
+            foreach (var pair in speHeroConfig.BindingsByNormalizedName)
+            {
+                bindingsByNormalizedName[pair.Key] = pair.Value;
+            }
+
+            foreach (var pair in speHeroFaceConfig.BindingsByHeroId.OrderBy(pair => pair.Key))
+            {
+                if (!bindings.ContainsKey(pair.Key))
+                {
+                    bindings[pair.Key] = pair.Value;
+                }
+            }
+
+            foreach (var pair in speHeroFaceConfig.BindingsByNormalizedName)
+            {
+                if (!bindingsByNormalizedName.ContainsKey(pair.Key))
+                {
+                    bindingsByNormalizedName[pair.Key] = pair.Value;
+                }
+            }
+
+            foreach (PortraitBindingInfo binding in bindings.Values
+                         .Concat(bindingsByNormalizedName.Values)
+                         .GroupBy(item => item.SourceHeroId)
+                         .Select(group => group.First())
+                         .OrderBy(item => item.SourceHeroId))
+            {
+                string foundPath = FindExistingPortraitPath(binding.SourceHeroId, binding.Origin);
+                if (!string.IsNullOrWhiteSpace(foundPath))
+                {
+                    portraitPaths[binding.SourceHeroId] = foundPath;
+                }
+            }
+
+            _cachedPortraitBindingsByHeroId = bindings;
+            _cachedPortraitBindingsByNormalizedName = bindingsByNormalizedName;
+            _cachedPortraitPathsBySourceHeroId = portraitPaths;
+            _cachedPortraitBindingSignature = bindingSignature;
+        }
+
+        internal static bool TryLoadCustomPortraitSprite(HeroData heroData, out Sprite sprite)
+        {
+            sprite = null;
+            if (heroData == null || heroData.heroID < 0 || !TryResolvePortraitBinding(heroData, out PortraitBindingInfo binding, out _))
+            {
+                return false;
+            }
+
+            int sourceHeroId = binding.SourceHeroId;
+            PortraitConfigOrigin origin = binding.Origin;
+            if (!_cachedPortraitPathsBySourceHeroId.TryGetValue(sourceHeroId, out string foundImagePath) || string.IsNullOrWhiteSpace(foundImagePath))
+            {
+                RemovePortraitSpriteCache(sourceHeroId);
+                return false;
+            }
+
+            string displayPath = GetDisplayPortraitPath(sourceHeroId, origin, foundImagePath);
+            if (string.IsNullOrWhiteSpace(displayPath))
+            {
+                displayPath = foundImagePath;
+            }
+
+            DateTime writeTimeUtc = File.GetLastWriteTimeUtc(foundImagePath);
+            if (CachedPortraitSpritesByHeroId.TryGetValue(sourceHeroId, out PortraitSpriteCacheEntry cachedEntry) &&
+                cachedEntry.Sprite != null &&
+                string.Equals(cachedEntry.ImagePath, foundImagePath, StringComparison.OrdinalIgnoreCase) &&
+                cachedEntry.WriteTimeUtc == writeTimeUtc)
+            {
+                sprite = cachedEntry.Sprite;
+                return true;
+            }
+
+            RemovePortraitSpriteCache(sourceHeroId);
+
+            try
+            {
+                byte[] imageBytes = File.ReadAllBytes(foundImagePath);
+                var texture = new Texture2D(2, 2, TextureFormat.ARGB32, false);
+                if (!ImageConversion.LoadImage(texture, imageBytes))
+                {
+                    UnityEngine.Object.Destroy(texture);
+                    WarnPortraitIssueOnce($"读取 NPC 自定义立绘失败：runtimeID={heroData.heroID}, sourceID={sourceHeroId}, path={displayPath}");
+                    return false;
+                }
+
+                texture.name = $"LongYinCustomSpeHeroPortrait_{sourceHeroId}";
+                texture.wrapMode = TextureWrapMode.Clamp;
+                var rect = new Rect(0f, 0f, texture.width, texture.height);
+                Sprite loadedSprite = Sprite.Create(texture, rect, new Vector2(0.5f, 0.5f), 100f);
+                loadedSprite.name = texture.name;
+                CachedPortraitSpritesByHeroId[sourceHeroId] = new PortraitSpriteCacheEntry(foundImagePath, writeTimeUtc, texture, loadedSprite);
+                sprite = loadedSprite;
+                return true;
+            }
+            catch (Exception ex)
+            {
+                WarnPortraitIssueOnce($"加载 NPC 自定义立绘异常：runtimeID={heroData.heroID}, sourceID={sourceHeroId}, path={displayPath}，{ex.GetType().Name} - {ex.Message}");
+                return false;
+            }
+        }
+
+        private static string FindExistingPortraitPath(int heroId, PortraitConfigOrigin origin)
+        {
+            foreach ((string FullPath, string DisplayPath) candidate in GetCandidatePortraitPaths(heroId, origin))
+            {
+                if (File.Exists(candidate.FullPath))
+                {
+                    return candidate.FullPath;
+                }
+            }
+
+            return string.Empty;
+        }
+
+        private static string GetDisplayPortraitPath(int heroId, PortraitConfigOrigin origin, string fullPath)
+        {
+            if (string.IsNullOrWhiteSpace(fullPath))
+            {
+                return string.Empty;
+            }
+
+            foreach ((string FullPath, string DisplayPath) candidate in GetCandidatePortraitPaths(heroId, origin))
+            {
+                if (string.Equals(candidate.FullPath, fullPath, StringComparison.OrdinalIgnoreCase))
+                {
+                    return candidate.DisplayPath;
+                }
+            }
+
+            return string.Empty;
+        }
+
+        private static IEnumerable<(string FullPath, string DisplayPath)> GetCandidatePortraitPaths(int heroId, PortraitConfigOrigin origin)
+        {
+            string heroIdText = heroId.ToString(CultureInfo.InvariantCulture);
+            string[] fileNames =
+            {
+                $"{heroIdText}.png",
+                $"{heroIdText}.jpg",
+                $"{heroIdText}.jpeg"
+            };
+
+            var yielded = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (origin != null && !string.IsNullOrWhiteSpace(origin.PortraitDir))
+            {
+                foreach (string fileName in fileNames)
+                {
+                    string fullPath = Path.Combine(origin.PortraitDir, fileName);
+                    if (yielded.Add(fullPath))
+                    {
+                        string displayPath = string.IsNullOrWhiteSpace(origin.RelativePortraitDir)
+                            ? fullPath
+                            : Path.Combine(origin.RelativePortraitDir, fileName);
+                        yield return (fullPath, displayPath);
+                    }
+                }
+            }
+
+            foreach (string fileName in fileNames)
+            {
+                string rootPath = Path.Combine(PortraitsDir, fileName);
+                if (yielded.Add(rootPath))
+                {
+                    yield return (rootPath, Path.Combine("UserData", "LongYinCustomSpeHeroData", "Portraits", fileName));
+                }
+            }
+        }
+
+        private static void WarnPortraitIssueOnce(string message)
+        {
+            if (!string.IsNullOrWhiteSpace(message) && PortraitWarnings.Add(message))
+            {
+                LOG.Warning(message);
+            }
+        }
+
+        private static void ResetPortraitSpriteCache()
+        {
+            foreach (int heroId in CachedPortraitSpritesByHeroId.Keys.ToList())
+            {
+                RemovePortraitSpriteCache(heroId);
+            }
+        }
+
+        private static void RemovePortraitSpriteCache(int heroId)
+        {
+            if (!CachedPortraitSpritesByHeroId.TryGetValue(heroId, out PortraitSpriteCacheEntry cachedEntry))
+            {
+                return;
+            }
+
+            if (cachedEntry.Sprite != null)
+            {
+                UnityEngine.Object.Destroy(cachedEntry.Sprite);
+            }
+
+            if (cachedEntry.Texture != null)
+            {
+                UnityEngine.Object.Destroy(cachedEntry.Texture);
+            }
+
+            CachedPortraitSpritesByHeroId.Remove(heroId);
+        }
+
+        internal static string DescribeTransformContext(Transform targetSkeletonParent)
+        {
+            if (targetSkeletonParent == null)
+            {
+                return "targetSkeletonParent=null";
+            }
+
+            string path = BuildTransformPath(targetSkeletonParent);
+            RectTransform rectTransform = targetSkeletonParent.TryCast<RectTransform>();
+            string rectInfo = rectTransform == null
+                ? "rect=n/a"
+                : $"rect=({rectTransform.rect.width}, {rectTransform.rect.height}), anchored=({rectTransform.anchoredPosition3D.x}, {rectTransform.anchoredPosition3D.y}, {rectTransform.anchoredPosition3D.z})";
+
+            string parentName = targetSkeletonParent.parent == null ? "<null>" : targetSkeletonParent.parent.gameObject.name;
+            return $"path={path}, parent={parentName}, childCount={targetSkeletonParent.childCount}, {rectInfo}";
+        }
+
+        internal static string BuildTransformPath(Transform transform)
+        {
+            if (transform == null)
+            {
+                return "<null>";
+            }
+
+            var names = new List<string>();
+            Transform current = transform;
+            while (current != null)
+            {
+                names.Add(current.gameObject.name);
+                current = current.parent;
+            }
+
+            names.Reverse();
+            return string.Join("/", names);
+        }
+
+        internal static void LogPortraitAppliedOnce(HeroData heroData, Transform targetSkeletonParent)
+        {
+            if (heroData == null)
+            {
+                return;
+            }
+
+            if (PortraitAppliedLogHeroIds.Add(heroData.heroID))
+            {
+                LOG.Msg($"已应用 NPC 自定义立绘：heroID={heroData.heroID}, heroName={heroData.heroName}, {DescribeTransformContext(targetSkeletonParent)}");
+            }
         }
 
         private static bool ValidateHeaders(string[] headers, string[] requiredHeaders, string path)
@@ -645,6 +1360,30 @@ namespace LongYinCustomSpeHeroData
             {
                 Main.LOG.Warning($"处理资源失败：path={path}，{ex.GetType().Name} - {ex.Message}");
             }
+        }
+    }
+
+    [HarmonyPatch(typeof(HeroData), nameof(HeroData.SetSkeletonGraphic), new[] { typeof(Transform), typeof(int), typeof(int) })]
+    internal static class HeroDataSetSkeletonGraphicPatch
+    {
+        [HarmonyPrefix]
+        [HarmonyPriority(Priority.Low)]
+        private static bool Prefix(HeroData __instance, Transform targetSkeletonParent)
+        {
+            CustomNpcPortraitFlow.HideNpcStaticPortraitOnly(targetSkeletonParent);
+
+            if (__instance == null || __instance.heroID == 0 || __instance.isSummon)
+            {
+                return true;
+            }
+
+            if (CustomNpcPortraitFlow.TryApplyCustomPortrait(__instance, targetSkeletonParent))
+            {
+                return false;
+            }
+
+            CustomNpcPortraitFlow.RestoreOriginalDisplay(targetSkeletonParent);
+            return true;
         }
     }
 

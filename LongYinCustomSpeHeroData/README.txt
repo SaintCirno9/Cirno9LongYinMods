@@ -1,25 +1,58 @@
-《龙胤立志传》特殊角色数据自定义 Mod (LongYinCustomSpeHeroData)
+《龙胤立志传》特殊角色数据与自定义立绘 Mod (LongYinCustomSpeHeroData)
 
 【安装说明】
 1. 本 Mod 依赖 MelonLoader 运行环境。
 2. 将 `LongYinCustomSpeHeroData.dll` 放入游戏目录下的 `Mods` 文件夹。
 
 【使用说明】
-1. 第一次启动游戏后，Mod 会在 `UserData\LongYinCustomSpeHeroData` 下生成以下文件：
+1. 第一次启动游戏后，Mod 会在 `UserData\LongYinCustomSpeHeroData` 下生成以下内容：
    - `LongYinCustomSpeHeroData.cfg`
+   - `Vanilla_SpeHeroData.csv`
+   - `Vanilla_SpeHeroFaceData.csv`
+   - `Data`
+2. 新版推荐把你的配置放进 `Data\数字目录`，例如：
+   - `UserData\LongYinCustomSpeHeroData\Data\000\SpeHeroData.csv`
+   - `UserData\LongYinCustomSpeHeroData\Data\000\SpeHeroFaceData.csv`
+   - `UserData\LongYinCustomSpeHeroData\Data\000\PortraitLayout.csv`
+   - `UserData\LongYinCustomSpeHeroData\Data\000\Portraits`
+3. 如果第一次启动时没有检测到任何配置，Mod 会自动生成：
+   - `Data\000\SpeHeroData.csv`
+   - `Data\000\SpeHeroFaceData.csv`
+   - `Data\000\PortraitLayout.csv`
+   - `Data\000\Portraits`
+4. 为兼容旧版本，Mod 仍会读取根目录下已有的：
    - `SpeHeroData.csv`
    - `SpeHeroFaceData.csv`
-   - `vanilla_SpeHeroData.csv`
-   - `vanilla_SpeHeroFaceData.csv`
-2. `LongYinCustomSpeHeroData.cfg` 用于控制是否允许所有特殊人物可招募：
+   - `PortraitLayout.csv`
+   - `Portraits`
+   但新版不会再自动创建这些旧路径，建议迁移到 `Data\数字目录`。
+5. `LongYinCustomSpeHeroData.cfg` 用于控制是否允许所有特殊人物可招募：
    - 默认值为 `EnableRecruitAllSpeHeroes=true`
    - 设置为 `true` 时，会在特殊人物详情界面和实际招募入口中自动放开招募
    - 设置为 `false` 时，保持游戏原版招募逻辑
-3. `SpeHeroData.csv` 对应 `GameData/SpeHeroData`。
-4. `SpeHeroFaceData.csv` 对应 `GameData/SpeHeroFaceData`。
-5. 配置文件中如果与原版 `id` 相同，则覆盖原条目；如果是新 `id`，则自动追加到表尾。
-6. 修改保存后重新启动游戏即可生效。
+6. `SpeHeroData.csv` 对应 `GameData/SpeHeroData`。
+7. `SpeHeroFaceData.csv` 对应 `GameData/SpeHeroFaceData`。
+8. 多个 `Data\数字目录` 会按数字从小到大加载，例如 `000 -> 010 -> 100`。
+9. 如果多个配置文件里出现相同 `id`：
+   - 后加载的配置会覆盖先加载的配置
+   - 立绘图片也会跟随最终生效的那份配置来源
+10. 自定义 NPC 立绘用法：
+   - 把图片放进对应配置目录的 `Portraits` 文件夹
+   - 文件名必须和特殊人物 `id` 一致，例如 `171.png`
+   - 支持 `png / jpg / jpeg`
+   - 如果 `Data\100\Portraits\171.png` 不存在，Mod 会继续尝试根目录 `Portraits\171.png`
+   - 只有配置中实际出现过的特殊人物 `id`，Mod 才会尝试读取对应图片
+   - 对旧档里运行时 `heroID` 已变化的特殊人物，Mod 会继续按人物名字回退匹配源配置，因此一般不需要把图片改名成存档中的新 `heroID`
+11. `PortraitLayout.csv` 用于给每个 NPC 单独配置图片缩放和偏移，表头如下：
+   - `id,详情缩放,详情偏移X,详情偏移Y,卡片缩放,卡片偏移X,卡片偏移Y,通用缩放,通用偏移X,通用偏移Y`
+   - `详情*` 用于人物详情大立绘
+   - `卡片*` 用于卡片/列表小立绘
+   - `通用*` 用于其它兜底场景
+   - 留空表示不覆盖默认值
+12. 只要该 NPC 被游戏通过 `HeroData.SetSkeletonGraphic(...)` 显示立绘，Mod 就会优先显示你的外部图片；找不到图片时自动回退原版立绘。
+13. 修改保存后重新进入游戏，新的 CSV、布局参数和图片即可生效。
 
 【注意事项】
 1. 建议使用 VS Code 或 Notepad++ 编辑 CSV，避免 Excel 改坏编码或分隔符。
 2. Mod 已兼容 UTF-8 与 GBK 读取，但仍建议统一保存为 UTF-8。
+3. 如果某张图片读取失败或路径不存在，MelonLoader 控制台会输出警告，但不会阻断整个 Mod。
