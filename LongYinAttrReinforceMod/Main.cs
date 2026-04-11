@@ -10,7 +10,7 @@ using HarmonyLib;
 using Il2Cpp;
 using MelonLoader;
 
-[assembly: MelonInfo(typeof(LongYinAttrReinforceMod.Main), "LongYinAttrReinforceMod", "1.3.0", "SaintCirno9", null)]
+[assembly: MelonInfo(typeof(LongYinAttrReinforceMod.Main), "LongYinAttrReinforceMod", "1.4.0", "SaintCirno9", null)]
 [assembly: MelonGame("TppStudio", "LongYinLiZhiZhuan")]
 
 namespace LongYinAttrReinforceMod
@@ -554,6 +554,22 @@ namespace LongYinAttrReinforceMod
             return null;
         }
 
+        internal static HeroData ResolveCurrentCountHero(HeroSpeAddData addData)
+        {
+            if (addData == null)
+            {
+                return null;
+            }
+
+            HeroData currentHero = _currentCountHero;
+            if (BelongsToHero(addData, currentHero))
+            {
+                return currentHero;
+            }
+
+            return null;
+        }
+
         private static void RegisterAddData(HeroSpeAddData addData, HeroData hero)
         {
             ulong pointerValue = GetPointerValue(addData);
@@ -628,7 +644,9 @@ namespace LongYinAttrReinforceMod
                 return;
             }
 
-            HeroData hero = HeroAddDataOwnershipRegistry.Resolve(__instance);
+            // 只在 CountHeroData 正在统计当前英雄时注入，避免污染食物、Buff、技能等
+            // 其他也会读取 HeroSpeAddData.Get(57/59) 的业务链路。
+            HeroData hero = HeroAddDataOwnershipRegistry.ResolveCurrentCountHero(__instance);
             if (hero == null)
             {
                 return;
