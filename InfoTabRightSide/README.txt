@@ -28,4 +28,4 @@ InfoTabRightSide
 
 发布文件：
 1. DLL：`InfoTabRightSide.dll`
-2. 压缩包：`InfoTabRightSide-v1.1.0.zip`
+2. 压缩包：`InfoTabRightSide-v1.2.0.zip`

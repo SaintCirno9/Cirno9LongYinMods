@@ -4,7 +4,7 @@ using Il2Cpp;
 using MelonLoader;
 using UnityEngine;
 
-[assembly: MelonInfo(typeof(InfoTabRightSide.Main), "InfoTabRightSide", "1.1.0", "SaintCirno9", null)]
+[assembly: MelonInfo(typeof(InfoTabRightSide.Main), "InfoTabRightSide", "1.2.0", "SaintCirno9", null)]
 [assembly: MelonGame("TppStudio", "LongYinLiZhiZhuan")]
 
 namespace InfoTabRightSide
