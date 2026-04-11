@@ -7,6 +7,7 @@ InfoTabRightSide
 1. 将 `InfoController.AddInfoTab` 生成的弹出提示列移动到屏幕右侧。
 2. 将新提示的入场方向改为从右向左滑入。
 3. 提供简单偏移配置，方便按个人分辨率和 UI 习惯微调位置。
+4. 点击右侧提示区域时，立即清空当前已显示和待显示的全部提示消息。
 
 安装：
 1. 确保游戏已经安装 MelonLoader。
@@ -27,4 +28,4 @@ InfoTabRightSide
 
 发布文件：
 1. DLL：`InfoTabRightSide.dll`
-2. 压缩包：`InfoTabRightSide-v1.0.0.zip`
+2. 压缩包：`InfoTabRightSide-v1.1.0.zip`

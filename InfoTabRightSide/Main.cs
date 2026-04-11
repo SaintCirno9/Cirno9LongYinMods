@@ -4,7 +4,7 @@ using Il2Cpp;
 using MelonLoader;
 using UnityEngine;
 
-[assembly: MelonInfo(typeof(InfoTabRightSide.Main), "InfoTabRightSide", "1.0.0", "SaintCirno9", null)]
+[assembly: MelonInfo(typeof(InfoTabRightSide.Main), "InfoTabRightSide", "1.1.0", "SaintCirno9", null)]
 [assembly: MelonGame("TppStudio", "LongYinLiZhiZhuan")]
 
 namespace InfoTabRightSide
@@ -37,10 +37,12 @@ namespace InfoTabRightSide
         private const float RightMargin = 24f;
         private const float SlideDistance = 500f;
         private const float SlideDuration = 0.25f;
+        private const float ReferenceUiHeight = 1080f;
 
         private static readonly List<PopupAnimationState> ActiveAnimations = new();
 
         private static InfoTabRightSideConfig _config = InfoTabRightSideConfig.CreateDefault();
+        private static InfoController _trackedController;
         private static Transform _trackedListTransform;
         private static RectTransform _trackedListRect;
         private static Vector2 _originalAnchorMin;
@@ -65,6 +67,7 @@ namespace InfoTabRightSide
 
         internal static void ResetRuntimeState()
         {
+            _trackedController = null;
             _trackedListTransform = null;
             _trackedListRect = null;
             _lastPopupCount = 0;
@@ -82,6 +85,8 @@ namespace InfoTabRightSide
             {
                 return;
             }
+
+            _trackedController = controller;
 
             if (!TrackListIfNeeded(controller.popInfoList))
             {
@@ -173,7 +178,7 @@ namespace InfoTabRightSide
         {
             if (_trackedListRect != null)
             {
-                float autoOffsetX = Screen.width * 0.5f;
+                float autoOffsetX = ResolveAspectScaledHalfWidth();
                 _trackedListRect.anchorMin = new Vector2(1f, _originalAnchorMin.y);
                 _trackedListRect.anchorMax = new Vector2(1f, _originalAnchorMax.y);
                 _trackedListRect.pivot = new Vector2(1f, _originalPivot.y);
@@ -193,6 +198,16 @@ namespace InfoTabRightSide
             position.x = Mathf.Abs(_originalLocalPosition.x) + OffsetX;
             position.y = _originalLocalPosition.y + OffsetY;
             _trackedListTransform.localPosition = position;
+        }
+
+        private static float ResolveAspectScaledHalfWidth()
+        {
+            if (Screen.height <= 0)
+            {
+                return ReferenceUiHeight * 0.5f;
+            }
+
+            return ReferenceUiHeight * Screen.width / (float)Screen.height * 0.5f;
         }
 
         private static void RegisterNewPopups()
@@ -217,6 +232,63 @@ namespace InfoTabRightSide
             }
 
             _lastPopupCount = currentCount;
+        }
+
+        internal static bool TryHandlePopupClick(GameObject clickedObject)
+        {
+            if (!Enabled || clickedObject == null || _trackedListTransform == null)
+            {
+                return false;
+            }
+
+            Transform clickedTransform = clickedObject.transform;
+            if (clickedTransform == null || !clickedTransform.IsChildOf(_trackedListTransform))
+            {
+                return false;
+            }
+
+            ConsumeCurrentUiClick();
+            ClearAllPopups();
+            return true;
+        }
+
+        private static void ConsumeCurrentUiClick()
+        {
+            // 这里故意不做点击穿透：右侧提示区需要自己吃掉这次点击，否则清空时对象被销毁后，
+            // 同一帧点击还可能继续落到底层地图或其他 UI。后续如果出现“吞点”或“点了没反应”，
+            // 优先检查这个回调里的 touch 清理逻辑，以及弹窗区域是否仍在 popInfoList 子节点下。
+            var currentTouch = UICamera.currentTouch;
+            if (currentTouch != null)
+            {
+                currentTouch.clickNotification = UICamera.ClickNotification.None;
+                currentTouch.pressed = null;
+                currentTouch.dragged = null;
+            }
+
+            UICamera.hoveredObject = null;
+        }
+
+        private static void ClearAllPopups()
+        {
+            if (_trackedController?.newInfoTabDatas != null)
+            {
+                _trackedController.newInfoTabDatas.Clear();
+            }
+
+            if (_trackedListTransform != null)
+            {
+                for (int i = _trackedListTransform.childCount - 1; i >= 0; i--)
+                {
+                    Transform popup = _trackedListTransform.GetChild(i);
+                    if (popup != null)
+                    {
+                        UnityEngine.Object.Destroy(popup.gameObject);
+                    }
+                }
+            }
+
+            ActiveAnimations.Clear();
+            _lastPopupCount = 0;
         }
 
         private static void PreparePopupAnimation(Transform popupRoot)
@@ -307,6 +379,20 @@ namespace InfoTabRightSide
         private static void Postfix(InfoController __instance)
         {
             InfoTabRightSideRuntime.HandleInfoControllerUpdate(__instance);
+        }
+    }
+
+    [HarmonyPatch(typeof(PopInfoTabController), "OnClick")]
+    internal static class PopInfoTabController_OnClick_Patch
+    {
+        private static bool Prefix(PopInfoTabController __instance)
+        {
+            if (__instance == null)
+            {
+                return true;
+            }
+
+            return !InfoTabRightSideRuntime.TryHandlePopupClick(__instance.gameObject);
         }
     }
 }
