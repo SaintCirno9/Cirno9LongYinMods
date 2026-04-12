@@ -1,6 +1,6 @@
 using MelonLoader;
 
-[assembly: MelonInfo(typeof(FoodAutomation.Main), "FoodAutomation", "1.0.0", "SaintCirno9", null)]
+[assembly: MelonInfo(typeof(FoodAutomation.Main), "FoodAutomation", "1.1.0", "SaintCirno9", null)]
 [assembly: MelonGame("TppStudio", "LongYinLiZhiZhuan")]
 
 namespace FoodAutomation

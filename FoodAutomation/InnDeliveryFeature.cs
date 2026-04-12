@@ -458,6 +458,7 @@ namespace FoodAutomation
                 }
             }
 
+            result = PurchaseFromInnShops(worldData, player, reserveMoney, ignoreReserve, result, processedLists);
             result = PurchaseFromOtherForceStorages(worldData, player, reserveMoney, ignoreReserve, result, processedLists);
 
             if (showInfo)
@@ -496,6 +497,18 @@ namespace FoodAutomation
 
             string forceName = force.forceName ?? "<null>";
             return $"门派仓库[{force.forceID}:{forceName}]";
+        }
+
+        private static string GetInnSourceName(InnData inn)
+        {
+            if (inn == null)
+            {
+                return "客栈[<null>]";
+            }
+
+            string innName = inn.innName ?? "<null>";
+            int nearAreaId = (inn.nearAreaID != null && inn.nearAreaID.Count > 0) ? inn.nearAreaID[0] : -1;
+            return $"客栈[{inn.id}:{innName}@nearArea={nearAreaId}]";
         }
 
         private static bool IsSupportedDeliveryBuilding(int buildingId)
@@ -732,6 +745,29 @@ namespace FoodAutomation
                 string sourceName = GetForceStorageSourceName(force);
                 // Main.Log.Msg($"{DiagPrefix} 命中外门门派仓库：source={sourceName}, maxItemLv={maxItemLv}, itemCount={forceStorage.allItem?.Count ?? 0}");
                 result = PurchaseFromForceStorage(player, force, forceStorage, maxItemLv, reserveMoney, ignoreReserve, sourceName, result, processedLists);
+            }
+
+            return result;
+        }
+
+        private static InnDeliveryResult PurchaseFromInnShops(WorldData worldData, HeroData player, int reserveMoney, bool ignoreReserve, InnDeliveryResult result, HashSet<nint> processedLists)
+        {
+            if (worldData?.Inns == null || player == null)
+            {
+                return result;
+            }
+
+            for (int i = 0; i < worldData.Inns.Count; i++)
+            {
+                InnData inn = worldData.Inns[i];
+                ItemListData shopItemList = inn?.shopItemList;
+                if (shopItemList == null)
+                {
+                    continue;
+                }
+
+                string sourceName = GetInnSourceName(inn);
+                result = PurchaseFromShopList(player, shopItemList, reserveMoney, ignoreReserve, sourceName, result, processedLists);
             }
 
             return result;
