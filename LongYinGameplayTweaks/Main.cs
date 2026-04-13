@@ -78,16 +78,16 @@ namespace LongYinGameplayTweaks
     //     }
     // }
 
-    [HarmonyPatch(typeof(HeroData), nameof(HeroData.RefreshMaxAttriAndSkill))]
-    public class RefreshMaxAttriAndSkillPatch
-    {
-        [HarmonyPrefix]
-        public static bool Prefix(HeroData __instance)
-        {
-            // Main.LOG.Msg($"RefreshMaxAttriAndSkill called for hero: {__instance.heroName}");
-            return __instance.heroID != 0;
-        }
-    }
+    // [HarmonyPatch(typeof(HeroData), nameof(HeroData.RefreshMaxAttriAndSkill))]
+    // public class RefreshMaxAttriAndSkillPatch
+    // {
+    //     [HarmonyPrefix]
+    //     public static bool Prefix(HeroData __instance)
+    //     {
+    //         // Main.LOG.Msg($"RefreshMaxAttriAndSkill called for hero: {__instance.heroName}");
+    //         return __instance.heroID != 0;
+    //     }
+    // }
 
     [HarmonyPatch(typeof(BreakThroughController), nameof(BreakThroughController.BreakThroughChoiceClicked))]
     public class BreakThroughChoiceClickedPatch
@@ -155,18 +155,18 @@ namespace LongYinGameplayTweaks
         }
     }
 
-    [HarmonyPatch(typeof(DrinkUIController), nameof(DrinkUIController.SetFillAmount))]
-    public class SetFillAmountPatch
-    {
-        [HarmonyPrefix]
-        public static void Prefix(DrinkUIController __instance, GameObject targetBar)
-        {
-            if (targetBar == __instance.enemyBar)
-            {
-                __instance.enemyFillAmount = 0.95f;
-            }
-        }
-    }
+    // [HarmonyPatch(typeof(DrinkUIController), nameof(DrinkUIController.SetFillAmount))]
+    // public class SetFillAmountPatch
+    // {
+    //     [HarmonyPrefix]
+    //     public static void Prefix(DrinkUIController __instance, GameObject targetBar)
+    //     {
+    //         if (targetBar == __instance.enemyBar)
+    //         {
+    //             __instance.enemyFillAmount = 0.95f;
+    //         }
+    //     }
+    // }
 
     [HarmonyPatch(typeof(GameDataController), nameof(GameDataController.GetExternalStorageMaxValue))]
     public class GetExternalStorageMaxValuePatch
@@ -180,25 +180,25 @@ namespace LongYinGameplayTweaks
 
     
 
-    [HarmonyPatch(typeof(GameController), nameof(GameController.StartLoadGame))]
-    public class HeroTagReplaceTagCleanupPatch
-    {
-        [HarmonyPostfix]
-        public static void Postfix()
-        {
-            List<HeroTagDataBase> heroTags = GameDataController.Instance?.heroTagDataBase;
-            if (heroTags is not { Count: > 0 })
-            {
-                Main.LOG.Msg("HeroTag database is empty. Skipping replaceTag cleanup.");
-                return;
-            }
+    // [HarmonyPatch(typeof(GameController), nameof(GameController.StartLoadGame))]
+    // public class HeroTagReplaceTagCleanupPatch
+    // {
+    //     [HarmonyPostfix]
+    //     public static void Postfix()
+    //     {
+    //         List<HeroTagDataBase> heroTags = GameDataController.Instance?.heroTagDataBase;
+    //         if (heroTags is not { Count: > 0 })
+    //         {
+    //             Main.LOG.Msg("HeroTag database is empty. Skipping replaceTag cleanup.");
+    //             return;
+    //         }
 
-            foreach (HeroTagDataBase heroTag in heroTags)
-            {
-                heroTag?.replaceTag?.Clear();
-            }
+    //         foreach (HeroTagDataBase heroTag in heroTags)
+    //         {
+    //             heroTag?.replaceTag?.Clear();
+    //         }
 
-            Main.LOG.Msg("HeroTag replacement rules cleared.");
-        }
-    }
+    //         Main.LOG.Msg("HeroTag replacement rules cleared.");
+    //     }
+    // }
 }
