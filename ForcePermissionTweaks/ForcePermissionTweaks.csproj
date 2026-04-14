@@ -1,0 +1,94 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net6.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <AssemblyName>ForcePermissionTweaks</AssemblyName>
+    <RootNamespace>ForcePermissionTweaks</RootNamespace>
+    <OutputPath>..\\</OutputPath>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <DebugType>none</DebugType>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <GenerateDependencyFile>false</GenerateDependencyFile>
+    <PackageTempDir>$(BaseIntermediateOutputPath)package\\</PackageTempDir>
+    <PackageZipPath>$(MSBuildProjectDirectory)\\ForcePermissionTweaks.zip</PackageZipPath>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <GameRootDir Condition="Exists('$(MSBuildProjectDirectory)\\..\\..\\MelonLoader\\net6\\MelonLoader.dll')">$(MSBuildProjectDirectory)\\..\\..\\</GameRootDir>
+    <GameRootDir Condition="'$(GameRootDir)' == '' and Exists('$(MSBuildProjectDirectory)\\..\\..\\..\\MelonLoader\\net6\\MelonLoader.dll')">$(MSBuildProjectDirectory)\\..\\..\\..\\</GameRootDir>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="MelonLoader">
+      <HintPath>$(GameRootDir)MelonLoader\net6\MelonLoader.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="0Harmony">
+      <HintPath>$(GameRootDir)MelonLoader\net6\0Harmony.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Il2CppInterop.Runtime">
+      <HintPath>$(GameRootDir)MelonLoader\net6\Il2CppInterop.Runtime.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Assembly-CSharp">
+      <HintPath>$(GameRootDir)MelonLoader\Il2CppAssemblies\Assembly-CSharp.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Il2Cppmscorlib">
+      <HintPath>$(GameRootDir)MelonLoader\Il2CppAssemblies\Il2Cppmscorlib.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="UnityEngine.CoreModule">
+      <HintPath>$(GameRootDir)MelonLoader\Il2CppAssemblies\UnityEngine.CoreModule.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="UnityEngine.UI">
+      <HintPath>$(GameRootDir)MelonLoader\Il2CppAssemblies\UnityEngine.UI.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+  </ItemGroup>
+
+  <UsingTask TaskName="ReadModVersion" TaskFactory="RoslynCodeTaskFactory" AssemblyFile="$(MSBuildToolsPath)\\Microsoft.Build.Tasks.Core.dll">
+    <ParameterGroup>
+      <SourceFile ParameterType="System.String" Required="true" />
+      <ModVersion ParameterType="System.String" Output="true" />
+    </ParameterGroup>
+    <Task>
+      <Using Namespace="System.IO" />
+      <Using Namespace="System.Text.RegularExpressions" />
+      <Code Type="Fragment" Language="cs">
+        <![CDATA[
+          string content = File.ReadAllText(SourceFile);
+          var match = Regex.Match(content, @"MelonInfo\(.*?,\s*""[^""]*""\s*,\s*""([^""]+)""");
+          if (match.Success) {
+              ModVersion = match.Groups[1].Value;
+          } else {
+              ModVersion = "1.0.0";
+          }
+        ]]>
+      </Code>
+    </Task>
+  </UsingTask>
+
+  <Target Name="PackageBuildOutput" AfterTargets="Build">
+    <ReadModVersion SourceFile="$(MSBuildProjectDirectory)\\Main.cs">
+      <Output TaskParameter="ModVersion" PropertyName="ModVersion" />
+    </ReadModVersion>
+    <PropertyGroup>
+      <PackageZipPath>$(MSBuildProjectDirectory)\\ForcePermissionTweaks-v$(ModVersion).zip</PackageZipPath>
+    </PropertyGroup>
+    <ItemGroup>
+      <PackageFiles Include="$(TargetPath)" />
+      <PackageFiles Include="$(MSBuildProjectDirectory)\\README.txt" />
+    </ItemGroup>
+    <RemoveDir Directories="$(PackageTempDir)" />
+    <MakeDir Directories="$(PackageTempDir)" />
+    <Copy SourceFiles="@(PackageFiles)" DestinationFolder="$(PackageTempDir)" />
+    <Delete Files="$(PackageZipPath)" Condition="Exists('$(PackageZipPath)')" />
+    <ZipDirectory SourceDirectory="$(PackageTempDir)" DestinationFile="$(PackageZipPath)" Overwrite="true" />
+    <RemoveDir Directories="$(PackageTempDir)" />
+    <Message Text="打包完成：$(PackageZipPath)" Importance="high" />
+  </Target>
+</Project>
