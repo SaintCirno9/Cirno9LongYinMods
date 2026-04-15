@@ -70,4 +70,4 @@ HotkeyRemap
 
 发布文件：
 1. DLL：`HotkeyRemap.dll`
-2. 压缩包：`HotkeyRemap-v1.1.0.zip`
+2. 压缩包：`HotkeyRemap-v1.1.1.zip`

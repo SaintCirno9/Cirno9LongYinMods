@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Reflection;
 using HarmonyLib;
 using Il2Cpp;
 using MelonLoader;
@@ -811,17 +810,9 @@ namespace HotkeyRemap
         }
     }
 
-    [HarmonyPatch]
+    [HarmonyPatch(typeof(SettingMenuController), nameof(SettingMenuController.ShowSettingMenu))]
     internal static class SettingMenuControllerShowSettingMenuPatch
     {
-        private static MethodBase TargetMethod()
-        {
-            Type type = AccessTools.TypeByName("SettingMenuController");
-            MethodBase method = type == null ? null : AccessTools.Method(type, "ShowSettingMenu");
-            Main.Log.Msg($"HotkeySettingsMenuUi.TargetMethod: type={(type == null ? "<null>" : type.FullName)} method={(method == null ? "<null>" : method.Name)}");
-            return method;
-        }
-
         [HarmonyPostfix]
         private static void Postfix(SettingMenuController __instance)
         {

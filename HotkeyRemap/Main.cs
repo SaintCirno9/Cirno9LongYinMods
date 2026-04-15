@@ -1,9 +1,9 @@
 using MelonLoader;
 using HarmonyLib;
+using Il2Cpp;
 using System;
-using System.Reflection;
 
-[assembly: MelonInfo(typeof(HotkeyRemap.Main), "HotkeyRemap", "1.1.0", "SaintCirno9", null)]
+[assembly: MelonInfo(typeof(HotkeyRemap.Main), "HotkeyRemap", "1.1.1", "SaintCirno9", null)]
 [assembly: MelonGame("TppStudio", "LongYinLiZhiZhuan")]
 
 namespace HotkeyRemap
@@ -40,9 +40,7 @@ namespace HotkeyRemap
         {
             try
             {
-                Type type = AccessTools.TypeByName("SettingMenuController");
-                MethodBase method = type == null ? null : AccessTools.Method(type, "ShowSettingMenu");
-                Log.Msg($"设置菜单补丁目标：type={(type == null ? "<null>" : type.FullName)}，method={(method == null ? "<null>" : method.Name)}");
+                Log.Msg($"设置菜单补丁目标：type={typeof(SettingMenuController).FullName}，method={nameof(SettingMenuController.ShowSettingMenu)}");
             }
             catch (Exception ex)
             {
