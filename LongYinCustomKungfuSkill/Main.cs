@@ -11,7 +11,7 @@ using Il2CppInterop.Runtime;
 using Il2CppSystem.Collections.Generic;
 using UnityEngine;
 
-[assembly: MelonInfo(typeof(LongYinCustomKungfuSkill.Main), "LongYinCustomKungfuSkill", "2.3.0", "SaintCirno9", null)]
+[assembly: MelonInfo(typeof(LongYinCustomKungfuSkill.Main), "LongYinCustomKungfuSkill", "2.3.1", "SaintCirno9", null)]
 [assembly: MelonGame("TppStudio", "LongYinLiZhiZhuan")]
 
 namespace LongYinCustomKungfuSkill
@@ -150,6 +150,7 @@ namespace LongYinCustomKungfuSkill
         internal static readonly System.Collections.Generic.HashSet<string> CheckedCustomSkillIconIds = new(StringComparer.Ordinal);
         private static LoadedConfigData _cachedConfigData = LoadedConfigData.Empty;
         private static DateTime _cachedConfigWriteTimeUtc = DateTime.MinValue;
+        private static bool _legacyStructureWarningShown;
 
         private static readonly string SampleCsv =
             "id,类别,等级,名字,描述,基础威力,经验系数,修炼效果,运功效果,威力系数,修炼需求,攻击范围,伤害范围,使用特效,内力消耗,所属势力,使用目标,攻击架势,防御架势,召唤ID,使用次数,动作,子弹,特效,使用武器,伤害顺序,角色位移,Trail,隐藏\r\n" +
@@ -186,10 +187,14 @@ namespace LongYinCustomKungfuSkill
                 {
                     Directory.CreateDirectory(SamplePackDir);
                     Directory.CreateDirectory(SamplePackIconDir);
-                    LOG.Warning(
-                        "检测到旧版根目录配置结构，当前仍会兼容读取。新版建议路径：" +
-                        " CSV -> UserData\\LongYinCustomKungfuSkill\\Data\\000\\KungfuSkillData.csv；" +
-                        " 图标 -> UserData\\LongYinCustomKungfuSkill\\Data\\000\\Icons");
+                    if (!_legacyStructureWarningShown)
+                    {
+                        _legacyStructureWarningShown = true;
+                        LOG.Warning(
+                            "检测到旧版根目录配置结构，当前仍会兼容读取。新版建议路径：" +
+                            " CSV -> UserData\\LongYinCustomKungfuSkill\\Data\\000\\KungfuSkillData.csv；" +
+                            " 图标 -> UserData\\LongYinCustomKungfuSkill\\Data\\000\\Icons");
+                    }
                 }
                 else if (CollectConfigSources().Count == 0)
                 {
@@ -1494,12 +1499,8 @@ namespace LongYinCustomKungfuSkill
                 return true;
             }
 
-            if (!Main.IsInjectedCustomSkillId(skillData.skillID))
-            {
-                return true;
-            }
-
-            if (skillData.belongForceID <= 19 && skillData.belongForceID >= 0)
+            // 原版覆盖功法也可能把所属势力改到高位索引，这时同样需要绕过游戏原生查表。
+            if (skillData.belongForceID <= 19)
             {
                 return true;
             }
@@ -1508,9 +1509,26 @@ namespace LongYinCustomKungfuSkill
             if (!Main.TryGetFallbackIconIdForSkill(skillData, out int fallbackSkillId))
             {
                 Main.LOG.Warning(
-                    $"[秘籍类别角标回退] 未找到可用的原版回退目标：customSkillID={skillId}, skillType={skillData.type}");
+                    $"[秘籍类别角标回退] 未找到可用的原版回退目标：skillID={skillId}, skillType={skillData.type}");
                 __result = null;
                 return false;
+            }
+
+            if (fallbackSkillId < 0 || fallbackSkillId > Main.VanillaKungFuMaxId)
+            {
+                Main.LOG.Warning(
+                    $"[秘籍类别角标回退] 回退目标超出原版范围：skillID={skillId}, fallbackSkillID={fallbackSkillId}, vanillaMaxID={Main.VanillaKungFuMaxId}");
+                __result = null;
+                return false;
+            }
+
+            int safeRareLv = targetItem.rareLv;
+            if (safeRareLv < 0 || safeRareLv > 5)
+            {
+                int originalRareLv = safeRareLv;
+                safeRareLv = Math.Clamp(safeRareLv, 0, 5);
+                Main.LOG.Warning(
+                    $"[秘籍类别角标回退] 书籍等级超出范围，已自动修正：skillID={skillId}, fallbackSkillID={fallbackSkillId}, rareLv={originalRareLv} -> {safeRareLv}");
             }
 
             try
@@ -1518,7 +1536,7 @@ namespace LongYinCustomKungfuSkill
                 _isResolvingFallback = true;
 
                 ItemData fallbackItem = new(ItemType.Book);
-                fallbackItem.SetBookData(fallbackSkillId, targetItem.rareLv);
+                fallbackItem.SetBookData(fallbackSkillId, safeRareLv);
                 BookTypeIconData fallbackIconData = __instance.FindBookTypeIconDataBase(fallbackItem);
                 if (fallbackIconData != null)
                 {
@@ -1527,14 +1545,14 @@ namespace LongYinCustomKungfuSkill
                 }
 
                 Main.LOG.Warning(
-                    $"[秘籍类别角标回退] 未找到原版角标配置：customSkillID={skillId}, fallbackSkillID={fallbackSkillId}");
+                    $"[秘籍类别角标回退] 未找到原版角标配置：skillID={skillId}, fallbackSkillID={fallbackSkillId}");
                 __result = null;
                 return false;
             }
             catch (Exception ex)
             {
                 Main.LOG.Warning(
-                    $"[秘籍类别角标回退] 处理失败：customSkillID={skillId}, fallbackSkillID={fallbackSkillId}，{ex.GetType().Name} - {ex.Message}");
+                    $"[秘籍类别角标回退] 处理失败：skillID={skillId}, fallbackSkillID={fallbackSkillId}，{ex.GetType().Name} - {ex.Message}");
                 __result = null;
                 return false;
             }
