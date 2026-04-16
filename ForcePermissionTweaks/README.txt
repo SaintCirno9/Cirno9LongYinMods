@@ -2,7 +2,7 @@ ForcePermissionTweaks
 
 功能：
 - 当前版本已实现“建筑管理按钮”权限覆盖。
-- 当前版本也已实现“藏经阁相关按钮”权限覆盖。
+- 当前版本也已实现“管理藏书按钮”权限覆盖。
 - 可分别修改按钮的显示条件和可点击所需职位。
 
 安装：
@@ -36,14 +36,14 @@ ForcePermissionTweaks
 12. `Original` 表示不覆盖原版可点击条件。
 13. `掌门` 按主角 `isLeader` 判定，其余职位按职位等级“及以上”判定。
 14. `EnableSpeBookStorageOverride`
-15. 是否启用藏经阁相关按钮的权限覆盖；设为 `false` 时恢复原版逻辑。
+15. 是否启用“管理藏书”按钮的权限覆盖；设为 `false` 时恢复原版逻辑。
 16. `SpeBookStorageVisibilityMode`
 17. 合法值与 `BuildButtonVisibilityMode` 相同。
-18. `Original` 表示沿用原版显示条件。
-19. 其他模式会按当前区域所属门派关系覆盖显示条件。
+18. `Original` 表示沿用“管理藏书”按钮的原版显示条件。
+19. 其他模式会按当前区域所属门派关系覆盖“管理藏书”按钮的显示条件。
 20. `SpeBookStorageMinimumRole`
 21. 合法值与 `BuildButtonMinimumRole` 相同。
-22. `Original` 表示沿用原版可点击条件。
+22. `Original` 表示沿用“管理藏书”按钮的原版可点击条件。
 23. `IgnoreCenterBuildingDiscipleCountForUpgrade`
 24. 是否忽略“门派正厅”升级时对弟子数的要求。
 25. 同时会隐藏升级描述文本里对应的弟子数不足提示。
@@ -59,16 +59,10 @@ ForcePermissionTweaks
 4. 藏经阁“管理藏书”当前默认显示条件为“本门派或附庸门派区域”。
 5. 藏经阁“管理藏书”当前默认最低职位为“副掌门”。
 
-藏经阁覆盖范围：
-1. 当前版本会按同一套权限规则覆盖以下藏经阁相关按钮：
-2. `ManageBookStore`
-3. `ShowBookStore`
-4. `ChooseReadBook`
-5. `ChooseReadBookMoney`
-6. `ShowBookWriter`
-7. `ShowBookWriterSelf`
-8. `StartSpeBookStorage`
+管理藏书覆盖范围：
+1. 当前版本仅会按这套权限规则处理 `ManageBookStore`。
+2. 其他藏经阁相关按钮不会再被本 Mod 统一改写。
 
 发布文件：
 1. DLL：`ForcePermissionTweaks.dll`
-2. 压缩包：`ForcePermissionTweaks-v1.1.0.zip`
+2. 压缩包：`ForcePermissionTweaks-v1.1.1.zip`

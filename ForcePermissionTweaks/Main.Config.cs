@@ -321,11 +321,11 @@ namespace ForcePermissionTweaks
                 {
                     "# ForcePermissionTweaks 配置文件",
                     "# 原版建筑管理按钮规则：仅玩家所属势力区域显示，亲传弟子及以上可点击。",
-                    "# 原版藏经阁相关按钮规则：沿用建筑选项原始条件；本 Mod 可单独覆盖显示和点击要求。",
+                    "# 原版藏经阁“管理藏书”按钮规则：沿用建筑选项原始条件；本 Mod 可单独覆盖显示和点击要求。",
                     "# EnableBuildButtonOverride: 是否启用建筑管理按钮权限覆盖。",
                     "# BuildButtonVisibilityMode: Original / PlayerForceAreaOnly / PlayerForceAndServantForce / PlayerForceServantAndAllyForce / Always。",
                     "# BuildButtonMinimumRole: Original / 外门弟子 / 入门弟子 / 正式弟子 / 亲传弟子 / 长老 / 副掌门 / 掌门。",
-                    "# EnableSpeBookStorageOverride: 是否启用藏经阁相关按钮权限覆盖。",
+                    "# EnableSpeBookStorageOverride: 是否启用“管理藏书”按钮权限覆盖。",
                     "# SpeBookStorageVisibilityMode: 与 BuildButtonVisibilityMode 使用相同合法值。",
                     "# SpeBookStorageMinimumRole: 与 BuildButtonMinimumRole 使用相同合法值。",
                     "# IgnoreCenterBuildingDiscipleCountForUpgrade: 是否忽略门派正厅升级所需弟子数。",

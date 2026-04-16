@@ -6,7 +6,7 @@ using MelonLoader;
 using UnityEngine;
 using UnityEngine.UI;
 
-[assembly: MelonInfo(typeof(ForcePermissionTweaks.Main), "ForcePermissionTweaks", "1.1.0", "SaintCirno9", null)]
+[assembly: MelonInfo(typeof(ForcePermissionTweaks.Main), "ForcePermissionTweaks", "1.1.1", "SaintCirno9", null)]
 [assembly: MelonGame("TppStudio", "LongYinLiZhiZhuan")]
 
 namespace ForcePermissionTweaks
@@ -22,7 +22,7 @@ namespace ForcePermissionTweaks
             ForcePermissionRuntime.Initialize(ForcePermissionConfigStore.Load(Log));
 
             Log.Msg(
-                $"ForcePermissionTweaks 已加载。配置文件：{ForcePermissionConfigStore.ConfigPathDisplay}。建筑按钮覆盖={FormatEnabled(ForcePermissionRuntime.Config.EnableBuildButtonOverride)}，建筑显示模式={ForcePermissionConfigStore.FormatVisibilityMode(ForcePermissionRuntime.Config.BuildButtonVisibilityMode)}，建筑最低职位={ForcePermissionConfigStore.FormatRoleRequirement(ForcePermissionRuntime.Config.BuildButtonMinimumRole)}，藏经阁覆盖={FormatEnabled(ForcePermissionRuntime.Config.EnableSpeBookStorageOverride)}，藏经阁显示模式={ForcePermissionConfigStore.FormatVisibilityMode(ForcePermissionRuntime.Config.SpeBookStorageVisibilityMode)}，藏经阁最低职位={ForcePermissionConfigStore.FormatRoleRequirement(ForcePermissionRuntime.Config.SpeBookStorageMinimumRole)}，正厅升级忽略弟子数={FormatEnabled(ForcePermissionRuntime.Config.IgnoreCenterBuildingDiscipleCountForUpgrade)}，VerboseLog={FormatEnabled(VerboseLog)}。");
+                $"ForcePermissionTweaks 已加载。配置文件：{ForcePermissionConfigStore.ConfigPathDisplay}。建筑按钮覆盖={FormatEnabled(ForcePermissionRuntime.Config.EnableBuildButtonOverride)}，建筑显示模式={ForcePermissionConfigStore.FormatVisibilityMode(ForcePermissionRuntime.Config.BuildButtonVisibilityMode)}，建筑最低职位={ForcePermissionConfigStore.FormatRoleRequirement(ForcePermissionRuntime.Config.BuildButtonMinimumRole)}，管理藏书按钮覆盖={FormatEnabled(ForcePermissionRuntime.Config.EnableSpeBookStorageOverride)}，管理藏书显示模式={ForcePermissionConfigStore.FormatVisibilityMode(ForcePermissionRuntime.Config.SpeBookStorageVisibilityMode)}，管理藏书最低职位={ForcePermissionConfigStore.FormatRoleRequirement(ForcePermissionRuntime.Config.SpeBookStorageMinimumRole)}，正厅升级忽略弟子数={FormatEnabled(ForcePermissionRuntime.Config.IgnoreCenterBuildingDiscipleCountForUpgrade)}，VerboseLog={FormatEnabled(VerboseLog)}。");
         }
 
         internal static void LogVerbose(string message)
@@ -59,16 +59,7 @@ namespace ForcePermissionTweaks
             internal bool IsApplied => LimitList != null && Level >= 0;
         }
 
-        private static readonly HashSet<string> SpeBookStorageCallFunctions = new(StringComparer.Ordinal)
-        {
-            "ManageBookStore",
-            "ShowBookStore",
-            "ChooseReadBook",
-            "ChooseReadBookMoney",
-            "ShowBookWriter",
-            "ShowBookWriterSelf",
-            "StartSpeBookStorage"
-        };
+        private const string ManageBookStoreCallFunction = "ManageBookStore";
 
         private static ForcePermissionConfig _config = ForcePermissionConfig.CreateDefault();
         private static bool _missingButtonWarningShown;
@@ -316,7 +307,7 @@ namespace ForcePermissionTweaks
 
             try
             {
-                List<AreaBuildingChoice> choices = FindTargetBuildingChoices(controller.buildingData);
+                List<AreaBuildingChoice> choices = FindManageBookStoreChoices(controller.buildingData);
                 if (choices.Count == 0)
                 {
                     return;
@@ -367,7 +358,7 @@ namespace ForcePermissionTweaks
 
                     updatedCount++;
                     Main.LogVerbose(
-                        $"藏经阁按钮权限已覆盖：callFuc={choice.callFuc}，show={shouldShow}，interactable={shouldInteract}，originalVisible={originalVisible}，originalRoleAllowed={originalRoleAllowed}。");
+                        $"管理藏书按钮权限已覆盖：callFuc={choice.callFuc}，show={shouldShow}，interactable={shouldInteract}，originalVisible={originalVisible}，originalRoleAllowed={originalRoleAllowed}。");
                 }
 
                 if (updatedCount > 0)
@@ -377,7 +368,7 @@ namespace ForcePermissionTweaks
             }
             catch (Exception ex)
             {
-                Main.Log.Error($"覆盖藏经阁按钮权限失败：{ex}");
+                Main.Log.Error($"覆盖管理藏书按钮权限失败：{ex}");
             }
         }
 
@@ -420,7 +411,7 @@ namespace ForcePermissionTweaks
             return GameController.MeetCondition(condition, justNeedOneCondition, buildingData);
         }
 
-        private static List<AreaBuildingChoice> FindTargetBuildingChoices(AreaBuildingData buildingData)
+        private static List<AreaBuildingChoice> FindManageBookStoreChoices(AreaBuildingData buildingData)
         {
             List<AreaBuildingChoice> targetChoices = new();
             AreaBuildingDataBase dataBase = buildingData?.DataBase();
@@ -433,7 +424,7 @@ namespace ForcePermissionTweaks
             for (int i = 0; i < choices.Count; i++)
             {
                 AreaBuildingChoice choice = choices[i];
-                if (choice != null && IsSpeBookStorageChoice(choice.callFuc))
+                if (choice != null && IsManageBookStoreChoice(choice.callFuc))
                 {
                     targetChoices.Add(choice);
                 }
@@ -442,9 +433,9 @@ namespace ForcePermissionTweaks
             return targetChoices;
         }
 
-        private static bool IsSpeBookStorageChoice(string callFunction)
+        private static bool IsManageBookStoreChoice(string callFunction)
         {
-            return !string.IsNullOrEmpty(callFunction) && SpeBookStorageCallFunctions.Contains(callFunction);
+            return string.Equals(callFunction, ManageBookStoreCallFunction, StringComparison.Ordinal);
         }
 
         private static GameObject FindBuildingChoiceButton(GameObject buttonGrid, string callFunction)
