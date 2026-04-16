@@ -40,6 +40,8 @@ namespace ForcePermissionTweaks
 
         internal ForceRoleRequirement SpeBookStorageMinimumRole { get; set; } = ForceRoleRequirement.ViceLeader;
 
+        internal bool IgnoreCenterBuildingDiscipleCountForUpgrade { get; set; } = true;
+
         internal bool VerboseLog { get; set; }
 
         internal static ForcePermissionConfig CreateDefault()
@@ -145,6 +147,7 @@ namespace ForcePermissionTweaks
             bool seenEnableSpeBookStorageOverride = false;
             bool seenSpeBookStorageVisibilityMode = false;
             bool seenSpeBookStorageMinimumRole = false;
+            bool seenIgnoreCenterBuildingDiscipleCountForUpgrade = false;
             bool seenVerboseLog = false;
             bool isValid = true;
 
@@ -245,6 +248,19 @@ namespace ForcePermissionTweaks
                         isValid = false;
                     }
                 }
+                else if (key.Equals("IgnoreCenterBuildingDiscipleCountForUpgrade", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (bool.TryParse(value, out bool parsed))
+                    {
+                        config.IgnoreCenterBuildingDiscipleCountForUpgrade = parsed;
+                        seenIgnoreCenterBuildingDiscipleCountForUpgrade = true;
+                    }
+                    else
+                    {
+                        log.Warning($"IgnoreCenterBuildingDiscipleCountForUpgrade 配置无效，将回退默认值：{value}");
+                        isValid = false;
+                    }
+                }
                 else if (key.Equals("VerboseLog", StringComparison.OrdinalIgnoreCase))
                 {
                     if (bool.TryParse(value, out bool parsed))
@@ -272,6 +288,7 @@ namespace ForcePermissionTweaks
                 seenEnableSpeBookStorageOverride &&
                 seenSpeBookStorageVisibilityMode &&
                 seenSpeBookStorageMinimumRole &&
+                seenIgnoreCenterBuildingDiscipleCountForUpgrade &&
                 seenVerboseLog;
         }
 
@@ -311,6 +328,7 @@ namespace ForcePermissionTweaks
                     "# EnableSpeBookStorageOverride: 是否启用藏经阁相关按钮权限覆盖。",
                     "# SpeBookStorageVisibilityMode: 与 BuildButtonVisibilityMode 使用相同合法值。",
                     "# SpeBookStorageMinimumRole: 与 BuildButtonMinimumRole 使用相同合法值。",
+                    "# IgnoreCenterBuildingDiscipleCountForUpgrade: 是否忽略门派正厅升级所需弟子数。",
                     "# 非法值、缺失项或未知项会回退默认值并重写本文件。",
                     "# VerboseLog: 是否输出详细日志。",
                     $"EnableBuildButtonOverride={config.EnableBuildButtonOverride.ToString().ToLowerInvariant()}",
@@ -319,6 +337,7 @@ namespace ForcePermissionTweaks
                     $"EnableSpeBookStorageOverride={config.EnableSpeBookStorageOverride.ToString().ToLowerInvariant()}",
                     $"SpeBookStorageVisibilityMode={FormatVisibilityMode(config.SpeBookStorageVisibilityMode)}",
                     $"SpeBookStorageMinimumRole={FormatRoleRequirement(config.SpeBookStorageMinimumRole)}",
+                    $"IgnoreCenterBuildingDiscipleCountForUpgrade={config.IgnoreCenterBuildingDiscipleCountForUpgrade.ToString().ToLowerInvariant()}",
                     $"VerboseLog={config.VerboseLog.ToString().ToLowerInvariant()}",
                 };
 

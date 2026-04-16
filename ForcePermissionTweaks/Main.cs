@@ -6,7 +6,7 @@ using MelonLoader;
 using UnityEngine;
 using UnityEngine.UI;
 
-[assembly: MelonInfo(typeof(ForcePermissionTweaks.Main), "ForcePermissionTweaks", "1.0.0", "SaintCirno9", null)]
+[assembly: MelonInfo(typeof(ForcePermissionTweaks.Main), "ForcePermissionTweaks", "1.1.0", "SaintCirno9", null)]
 [assembly: MelonGame("TppStudio", "LongYinLiZhiZhuan")]
 
 namespace ForcePermissionTweaks
@@ -22,7 +22,7 @@ namespace ForcePermissionTweaks
             ForcePermissionRuntime.Initialize(ForcePermissionConfigStore.Load(Log));
 
             Log.Msg(
-                $"ForcePermissionTweaks 已加载。配置文件：{ForcePermissionConfigStore.ConfigPathDisplay}。建筑按钮覆盖={FormatEnabled(ForcePermissionRuntime.Config.EnableBuildButtonOverride)}，建筑显示模式={ForcePermissionConfigStore.FormatVisibilityMode(ForcePermissionRuntime.Config.BuildButtonVisibilityMode)}，建筑最低职位={ForcePermissionConfigStore.FormatRoleRequirement(ForcePermissionRuntime.Config.BuildButtonMinimumRole)}，藏经阁覆盖={FormatEnabled(ForcePermissionRuntime.Config.EnableSpeBookStorageOverride)}，藏经阁显示模式={ForcePermissionConfigStore.FormatVisibilityMode(ForcePermissionRuntime.Config.SpeBookStorageVisibilityMode)}，藏经阁最低职位={ForcePermissionConfigStore.FormatRoleRequirement(ForcePermissionRuntime.Config.SpeBookStorageMinimumRole)}，VerboseLog={FormatEnabled(VerboseLog)}。");
+                $"ForcePermissionTweaks 已加载。配置文件：{ForcePermissionConfigStore.ConfigPathDisplay}。建筑按钮覆盖={FormatEnabled(ForcePermissionRuntime.Config.EnableBuildButtonOverride)}，建筑显示模式={ForcePermissionConfigStore.FormatVisibilityMode(ForcePermissionRuntime.Config.BuildButtonVisibilityMode)}，建筑最低职位={ForcePermissionConfigStore.FormatRoleRequirement(ForcePermissionRuntime.Config.BuildButtonMinimumRole)}，藏经阁覆盖={FormatEnabled(ForcePermissionRuntime.Config.EnableSpeBookStorageOverride)}，藏经阁显示模式={ForcePermissionConfigStore.FormatVisibilityMode(ForcePermissionRuntime.Config.SpeBookStorageVisibilityMode)}，藏经阁最低职位={ForcePermissionConfigStore.FormatRoleRequirement(ForcePermissionRuntime.Config.SpeBookStorageMinimumRole)}，正厅升级忽略弟子数={FormatEnabled(ForcePermissionRuntime.Config.IgnoreCenterBuildingDiscipleCountForUpgrade)}，VerboseLog={FormatEnabled(VerboseLog)}。");
         }
 
         internal static void LogVerbose(string message)
@@ -41,6 +41,24 @@ namespace ForcePermissionTweaks
 
     internal static class ForcePermissionRuntime
     {
+        internal readonly struct CenterBuildingUpgradeLimitOverrideState
+        {
+            internal CenterBuildingUpgradeLimitOverrideState(Il2CppSystem.Collections.Generic.List<float> limitList, int level, float originalValue)
+            {
+                LimitList = limitList;
+                Level = level;
+                OriginalValue = originalValue;
+            }
+
+            internal Il2CppSystem.Collections.Generic.List<float> LimitList { get; }
+
+            internal int Level { get; }
+
+            internal float OriginalValue { get; }
+
+            internal bool IsApplied => LimitList != null && Level >= 0;
+        }
+
         private static readonly HashSet<string> SpeBookStorageCallFunctions = new(StringComparer.Ordinal)
         {
             "ManageBookStore",
@@ -63,6 +81,34 @@ namespace ForcePermissionTweaks
             _config = config ?? ForcePermissionConfig.CreateDefault();
             _missingButtonWarningShown = false;
             _patchErrorShown = false;
+        }
+
+        internal static void ApplyCenterBuildingUpgradeLimitOverride(AreaBuildingData targetBuilding, out CenterBuildingUpgradeLimitOverrideState state)
+        {
+            state = default;
+
+            if (!_config.IgnoreCenterBuildingDiscipleCountForUpgrade ||
+                !TryGetCenterBuildingHeroLimitEntry(targetBuilding, out Il2CppSystem.Collections.Generic.List<float> heroLimitList, out int level))
+            {
+                return;
+            }
+
+            float originalValue = heroLimitList[level];
+            heroLimitList[level] = 0f;
+            state = new CenterBuildingUpgradeLimitOverrideState(heroLimitList, level, originalValue);
+
+            Main.LogVerbose(
+                $"已临时忽略门派正厅升级弟子数要求：areaID={targetBuilding.areaID}，buildingID={targetBuilding.buildingID}，lv={level}，originalLimit={originalValue}。");
+        }
+
+        internal static void RestoreCenterBuildingUpgradeLimitOverride(CenterBuildingUpgradeLimitOverrideState state)
+        {
+            if (!state.IsApplied)
+            {
+                return;
+            }
+
+            state.LimitList[state.Level] = state.OriginalValue;
         }
 
         internal static void ApplyBuildButtonOverride(AreaBuildController controller)
@@ -227,6 +273,38 @@ namespace ForcePermissionTweaks
             }
 
             return player.heroForceLv >= (int)requirement;
+        }
+
+        private static bool TryGetCenterBuildingHeroLimitEntry(
+            AreaBuildingData targetBuilding,
+            out Il2CppSystem.Collections.Generic.List<float> heroLimitList,
+            out int level)
+        {
+            heroLimitList = null;
+            level = -1;
+
+            if (targetBuilding == null)
+            {
+                return false;
+            }
+
+            AreaData areaData = targetBuilding.GetArea();
+            if (areaData == null || (int)areaData.areaType != 2)
+            {
+                return false;
+            }
+
+            AreaBuildingData centerBuilding = areaData.GetCenterBuilding();
+            if (centerBuilding == null ||
+                centerBuilding.areaID != targetBuilding.areaID ||
+                centerBuilding.buildingID != targetBuilding.buildingID)
+            {
+                return false;
+            }
+
+            heroLimitList = GlobalData.CenterBuildingUpgradeHeroLimit;
+            level = centerBuilding.lv;
+            return heroLimitList != null && level >= 0 && level < heroLimitList.Count;
         }
 
         internal static void ApplySpeBookStorageOverride(BuildingUIController controller)
@@ -475,6 +553,48 @@ namespace ForcePermissionTweaks
         private static void Postfix(BuildingUIController __instance)
         {
             ForcePermissionRuntime.ApplySpeBookStorageOverride(__instance);
+        }
+    }
+
+    [HarmonyPatch(typeof(GameController), nameof(GameController.BuildingCanUpgrade))]
+    internal static class GameController_BuildingCanUpgrade_Patch
+    {
+        private static void Prefix(AreaBuildingData targetBuilding, out ForcePermissionRuntime.CenterBuildingUpgradeLimitOverrideState __state)
+        {
+            ForcePermissionRuntime.ApplyCenterBuildingUpgradeLimitOverride(targetBuilding, out __state);
+        }
+
+        private static void Postfix(ForcePermissionRuntime.CenterBuildingUpgradeLimitOverrideState __state)
+        {
+            ForcePermissionRuntime.RestoreCenterBuildingUpgradeLimitOverride(__state);
+        }
+    }
+
+    [HarmonyPatch(typeof(AreaBuildingData), nameof(AreaBuildingData.CanUpgrade))]
+    internal static class AreaBuildingData_CanUpgrade_Patch
+    {
+        private static void Prefix(AreaBuildingData __instance, out ForcePermissionRuntime.CenterBuildingUpgradeLimitOverrideState __state)
+        {
+            ForcePermissionRuntime.ApplyCenterBuildingUpgradeLimitOverride(__instance, out __state);
+        }
+
+        private static void Postfix(ForcePermissionRuntime.CenterBuildingUpgradeLimitOverrideState __state)
+        {
+            ForcePermissionRuntime.RestoreCenterBuildingUpgradeLimitOverride(__state);
+        }
+    }
+
+    [HarmonyPatch(typeof(AreaBuildingData), nameof(AreaBuildingData.GetUpgradeDescribe))]
+    internal static class AreaBuildingData_GetUpgradeDescribe_Patch
+    {
+        private static void Prefix(AreaBuildingData __instance, out ForcePermissionRuntime.CenterBuildingUpgradeLimitOverrideState __state)
+        {
+            ForcePermissionRuntime.ApplyCenterBuildingUpgradeLimitOverride(__instance, out __state);
+        }
+
+        private static void Postfix(ForcePermissionRuntime.CenterBuildingUpgradeLimitOverrideState __state)
+        {
+            ForcePermissionRuntime.RestoreCenterBuildingUpgradeLimitOverride(__state);
         }
     }
 }

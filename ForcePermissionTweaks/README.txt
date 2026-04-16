@@ -18,7 +18,8 @@ ForcePermissionTweaks
 6. `EnableSpeBookStorageOverride=true`
 7. `SpeBookStorageVisibilityMode=PlayerForceAndServantForce`
 8. `SpeBookStorageMinimumRole=副掌门`
-9. `VerboseLog=false`
+9. `IgnoreCenterBuildingDiscipleCountForUpgrade=true`
+10. `VerboseLog=false`
 
 配置说明：
 1. `EnableBuildButtonOverride`
@@ -43,9 +44,13 @@ ForcePermissionTweaks
 20. `SpeBookStorageMinimumRole`
 21. 合法值与 `BuildButtonMinimumRole` 相同。
 22. `Original` 表示沿用原版可点击条件。
-23. `VerboseLog`
-24. 是否输出详细日志。
-25. 配置项缺失、非法值或未知项会自动回退默认值并重写配置文件。
+23. `IgnoreCenterBuildingDiscipleCountForUpgrade`
+24. 是否忽略“门派正厅”升级时对弟子数的要求。
+25. 同时会隐藏升级描述文本里对应的弟子数不足提示。
+26. 仅绕过正厅升级所需弟子数，其他资源、等级和施工状态等原版限制仍然保留。
+27. `VerboseLog`
+28. 是否输出详细日志。
+29. 配置项缺失、非法值或未知项会自动回退默认值并重写配置文件。
 
 原版参考：
 1. 建筑管理按钮原版显示条件为“当前区域属于玩家势力”。
@@ -66,4 +71,4 @@ ForcePermissionTweaks
 
 发布文件：
 1. DLL：`ForcePermissionTweaks.dll`
-2. 压缩包：`ForcePermissionTweaks-v1.0.0.zip`
+2. 压缩包：`ForcePermissionTweaks-v1.1.0.zip`
