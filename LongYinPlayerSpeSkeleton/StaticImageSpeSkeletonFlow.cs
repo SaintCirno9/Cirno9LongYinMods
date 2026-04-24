@@ -402,16 +402,17 @@ namespace LongYinPlayerSpeSkeleton
                 return;
             }
 
+            if (IsDialoguePortraitContext(targetSkeletonParent))
+            {
+                EnsureRootMask(portraitRect, enabled: false);
+                contentImage.preserveAspect = true;
+                ApplyDialoguePortraitContentSize(portraitRect, contentRect, sprite);
+                return;
+            }
+
             EnsureRootMask(portraitRect, enabled: false);
             contentImage.preserveAspect = true;
-            contentRect.anchorMin = Vector2.zero;
-            contentRect.anchorMax = Vector2.one;
-            contentRect.pivot = new Vector2(0.5f, 0.5f);
-            contentRect.offsetMin = Vector2.zero;
-            contentRect.offsetMax = Vector2.zero;
-            contentRect.anchoredPosition3D = Vector3.zero;
-            contentRect.localScale = Vector3.one;
-            contentRect.localRotation = Quaternion.identity;
+            ApplyGenericPortraitContentSize(portraitRect, contentRect, sprite);
         }
 
         private static void ApplyHeroDetailContentSize(RectTransform portraitRect, RectTransform contentRect, Sprite sprite)
@@ -514,6 +515,42 @@ namespace LongYinPlayerSpeSkeleton
             contentRect.localRotation = Quaternion.identity;
         }
 
+        private static void ApplyDialoguePortraitContentSize(RectTransform portraitRect, RectTransform contentRect, Sprite sprite)
+        {
+            if (portraitRect == null || contentRect == null || sprite == null)
+            {
+                return;
+            }
+
+            StaticImageSceneConfig sceneConfig = Main.DialoguePortraitStaticImageConfig;
+            contentRect.anchorMin = Vector2.zero;
+            contentRect.anchorMax = Vector2.one;
+            contentRect.pivot = new Vector2(0.5f, 0.5f);
+            contentRect.offsetMin = Vector2.zero;
+            contentRect.offsetMax = Vector2.zero;
+            contentRect.anchoredPosition3D = sceneConfig.OffsetVector3;
+            contentRect.localScale = new Vector3(sceneConfig.InsetRatio, sceneConfig.InsetRatio, 1f);
+            contentRect.localRotation = Quaternion.identity;
+        }
+
+        private static void ApplyGenericPortraitContentSize(RectTransform portraitRect, RectTransform contentRect, Sprite sprite)
+        {
+            if (portraitRect == null || contentRect == null || sprite == null)
+            {
+                return;
+            }
+
+            StaticImageSceneConfig sceneConfig = Main.GenericPortraitStaticImageConfig;
+            contentRect.anchorMin = Vector2.zero;
+            contentRect.anchorMax = Vector2.one;
+            contentRect.pivot = new Vector2(0.5f, 0.5f);
+            contentRect.offsetMin = Vector2.zero;
+            contentRect.offsetMax = Vector2.zero;
+            contentRect.anchoredPosition3D = sceneConfig.OffsetVector3;
+            contentRect.localScale = new Vector3(sceneConfig.InsetRatio, sceneConfig.InsetRatio, 1f);
+            contentRect.localRotation = Quaternion.identity;
+        }
+
         private static void EnsureRootMask(RectTransform portraitRect, bool enabled)
         {
             if (portraitRect == null)
@@ -586,6 +623,27 @@ namespace LongYinPlayerSpeSkeleton
                    viewport != null &&
                    string.Equals(content.gameObject.name, "Content", StringComparison.Ordinal) &&
                    string.Equals(viewport.gameObject.name, "Viewport", StringComparison.Ordinal);
+        }
+
+        private static bool IsDialoguePortraitContext(Transform targetSkeletonParent)
+        {
+            if (targetSkeletonParent == null)
+            {
+                return false;
+            }
+
+            string name = targetSkeletonParent.gameObject.name;
+            if (!string.Equals(name, "Face", StringComparison.Ordinal) &&
+                !string.Equals(name, "LeftFace", StringComparison.Ordinal) &&
+                !string.Equals(name, "RightFace", StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            string path = Main.BuildTransformPath(targetSkeletonParent);
+            return path.Contains("/PlotPanel/", StringComparison.Ordinal) ||
+                   path.Contains("/TalkPanel/", StringComparison.Ordinal) ||
+                   path.Contains("/HeroTalkUIPanel/", StringComparison.Ordinal);
         }
     }
 }

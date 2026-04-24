@@ -13,7 +13,7 @@ using UnityEngine;
 using UnityEngine.Events;
 using UnityEngine.UI;
 
-[assembly: MelonInfo(typeof(LongYinPlayerSpeSkeleton.Main), "LongYinPlayerSpeSkeleton", "1.1.1", "SaintCirno9", null)]
+[assembly: MelonInfo(typeof(LongYinPlayerSpeSkeleton.Main), "LongYinPlayerSpeSkeleton", "1.2.0", "SaintCirno9", null)]
 [assembly: MelonGame("TppStudio", "LongYinLiZhiZhuan")]
 
 namespace LongYinPlayerSpeSkeleton
@@ -991,7 +991,7 @@ namespace LongYinPlayerSpeSkeleton
             return buttonObject != null ? buttonObject.transform : null;
         }
 
-        private static string BuildTransformPath(Transform transform)
+        internal static string BuildTransformPath(Transform transform)
         {
             if (transform == null)
             {

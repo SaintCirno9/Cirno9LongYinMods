@@ -36,6 +36,8 @@ namespace LongYinPlayerSpeSkeleton
         private const string CharacterCreationStaticImageKeyPrefix = "StaticImageCharacterCreation";
         private const string HudAvatarStaticImageKeyPrefix = "StaticImageHudAvatar";
         private const string CardPortraitStaticImageKeyPrefix = "StaticImageCardPortrait";
+        private const string DialoguePortraitStaticImageKeyPrefix = "StaticImageDialoguePortrait";
+        private const string GenericPortraitStaticImageKeyPrefix = "StaticImageGenericPortrait";
         internal static readonly string ConfigDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "UserData", "LongYinPlayerSpeSkeleton");
         internal static readonly string ConfigPath = Path.Combine(ConfigDir, "LongYinPlayerSpeSkeleton.cfg");
         internal static readonly string PortraitsDir = Path.Combine(ConfigDir, "Portraits");
@@ -44,6 +46,8 @@ namespace LongYinPlayerSpeSkeleton
         private static readonly StaticImageSceneConfig DefaultCharacterCreationStaticImageConfig = new(1f, 0f, -60f);
         private static readonly StaticImageSceneConfig DefaultHudAvatarStaticImageConfig = new(0.8f, 15f, -70f);
         private static readonly StaticImageSceneConfig DefaultCardPortraitStaticImageConfig = new(0.9f, -10f, -20f);
+        private static readonly StaticImageSceneConfig DefaultDialoguePortraitStaticImageConfig = new(1f, 100f, -100f);
+        private static readonly StaticImageSceneConfig DefaultGenericPortraitStaticImageConfig = new(1f, 0f, 0f);
 
         private static bool _enabled = true;
         private static string _playerSpeHeroName = string.Empty;
@@ -54,6 +58,8 @@ namespace LongYinPlayerSpeSkeleton
         private static StaticImageSceneConfig _characterCreationStaticImageConfig = DefaultCharacterCreationStaticImageConfig;
         private static StaticImageSceneConfig _hudAvatarStaticImageConfig = DefaultHudAvatarStaticImageConfig;
         private static StaticImageSceneConfig _cardPortraitStaticImageConfig = DefaultCardPortraitStaticImageConfig;
+        private static StaticImageSceneConfig _dialoguePortraitStaticImageConfig = DefaultDialoguePortraitStaticImageConfig;
+        private static StaticImageSceneConfig _genericPortraitStaticImageConfig = DefaultGenericPortraitStaticImageConfig;
         private static bool _verboseLog;
         private static DateTime _configLastWriteTimeUtc = DateTime.MinValue;
 
@@ -147,6 +153,24 @@ namespace LongYinPlayerSpeSkeleton
             }
         }
 
+        internal static StaticImageSceneConfig DialoguePortraitStaticImageConfig
+        {
+            get
+            {
+                EnsureConfigLoaded();
+                return _dialoguePortraitStaticImageConfig;
+            }
+        }
+
+        internal static StaticImageSceneConfig GenericPortraitStaticImageConfig
+        {
+            get
+            {
+                EnsureConfigLoaded();
+                return _genericPortraitStaticImageConfig;
+            }
+        }
+
         internal static void EnsureConfigLoaded()
         {
             try
@@ -194,6 +218,8 @@ namespace LongYinPlayerSpeSkeleton
             EnsureStaticImageSceneConfigKeys(CharacterCreationStaticImageKeyPrefix, "创建人物界面", string.Empty, DefaultCharacterCreationStaticImageConfig);
             EnsureStaticImageSceneConfigKeys(HudAvatarStaticImageKeyPrefix, "左上角头像界面", string.Empty, DefaultHudAvatarStaticImageConfig);
             EnsureStaticImageSceneConfigKeys(CardPortraitStaticImageKeyPrefix, "卡片肖像界面", string.Empty, DefaultCardPortraitStaticImageConfig);
+            EnsureStaticImageSceneConfigKeys(DialoguePortraitStaticImageKeyPrefix, "对话界面人物肖像", string.Empty, DefaultDialoguePortraitStaticImageConfig);
+            EnsureStaticImageSceneConfigKeys(GenericPortraitStaticImageKeyPrefix, "通用肖像", string.Empty, DefaultGenericPortraitStaticImageConfig);
             RemoveConfigKey("ReplaceInCharacterCreation");
             RemoveConfigKey("StaticImageHeroDetailOverflowBias");
         }
@@ -222,6 +248,8 @@ namespace LongYinPlayerSpeSkeleton
             lines.AddRange(BuildStaticImageSceneConfigLines(CharacterCreationStaticImageKeyPrefix, "创建人物界面", string.Empty, DefaultCharacterCreationStaticImageConfig));
             lines.AddRange(BuildStaticImageSceneConfigLines(HudAvatarStaticImageKeyPrefix, "左上角头像界面", string.Empty, DefaultHudAvatarStaticImageConfig));
             lines.AddRange(BuildStaticImageSceneConfigLines(CardPortraitStaticImageKeyPrefix, "卡片肖像界面", string.Empty, DefaultCardPortraitStaticImageConfig));
+            lines.AddRange(BuildStaticImageSceneConfigLines(DialoguePortraitStaticImageKeyPrefix, "对话界面人物肖像", string.Empty, DefaultDialoguePortraitStaticImageConfig));
+            lines.AddRange(BuildStaticImageSceneConfigLines(GenericPortraitStaticImageKeyPrefix, "通用肖像", string.Empty, DefaultGenericPortraitStaticImageConfig));
             lines.AddRange(
                 new[]
                 {
@@ -404,6 +432,8 @@ namespace LongYinPlayerSpeSkeleton
             StaticImageSceneConfig characterCreationConfig = DefaultCharacterCreationStaticImageConfig;
             StaticImageSceneConfig hudAvatarConfig = DefaultHudAvatarStaticImageConfig;
             StaticImageSceneConfig cardPortraitConfig = DefaultCardPortraitStaticImageConfig;
+            StaticImageSceneConfig dialoguePortraitConfig = DefaultDialoguePortraitStaticImageConfig;
+            StaticImageSceneConfig genericPortraitConfig = DefaultGenericPortraitStaticImageConfig;
             bool verboseLog = false;
 
             foreach (string rawLine in File.ReadAllLines(ConfigPath))
@@ -454,6 +484,12 @@ namespace LongYinPlayerSpeSkeleton
                 else if (TryApplyStaticImageSceneConfigValue(ref cardPortraitConfig, CardPortraitStaticImageKeyPrefix, key, value))
                 {
                 }
+                else if (TryApplyStaticImageSceneConfigValue(ref dialoguePortraitConfig, DialoguePortraitStaticImageKeyPrefix, key, value))
+                {
+                }
+                else if (TryApplyStaticImageSceneConfigValue(ref genericPortraitConfig, GenericPortraitStaticImageKeyPrefix, key, value))
+                {
+                }
                 else if (key.Equals("VerboseLog", StringComparison.OrdinalIgnoreCase))
                 {
                     if (bool.TryParse(value, out bool parsedVerboseLog))
@@ -471,6 +507,8 @@ namespace LongYinPlayerSpeSkeleton
             _characterCreationStaticImageConfig = ClampStaticImageSceneConfig(characterCreationConfig);
             _hudAvatarStaticImageConfig = ClampStaticImageSceneConfig(hudAvatarConfig);
             _cardPortraitStaticImageConfig = ClampStaticImageSceneConfig(cardPortraitConfig);
+            _dialoguePortraitStaticImageConfig = ClampStaticImageSceneConfig(dialoguePortraitConfig);
+            _genericPortraitStaticImageConfig = ClampStaticImageSceneConfig(genericPortraitConfig);
             _verboseLog = verboseLog;
             _configLastWriteTimeUtc = File.GetLastWriteTimeUtc(ConfigPath);
             SpeHeroResolutionWarnings.Clear();
@@ -481,7 +519,7 @@ namespace LongYinPlayerSpeSkeleton
             {
                 Log.Msg(
                     System.ConsoleColor.Cyan,
-                    $"已读取配置：Enabled={_enabled}, PlayerSpeHeroName={(_playerSpeHeroName.Length == 0 ? "<空>" : _playerSpeHeroName)}, RenderMode={(int)_renderMode}, StaticImagePath={(_staticImagePath.Length == 0 ? "<空>" : _staticImagePath)}, HeroDetail={_heroDetailStaticImageConfig}, CharacterCreation={_characterCreationStaticImageConfig}, HudAvatar={_hudAvatarStaticImageConfig}, CardPortrait={_cardPortraitStaticImageConfig}, VerboseLog={_verboseLog}");
+                    $"已读取配置：Enabled={_enabled}, PlayerSpeHeroName={(_playerSpeHeroName.Length == 0 ? "<空>" : _playerSpeHeroName)}, RenderMode={(int)_renderMode}, StaticImagePath={(_staticImagePath.Length == 0 ? "<空>" : _staticImagePath)}, HeroDetail={_heroDetailStaticImageConfig}, CharacterCreation={_characterCreationStaticImageConfig}, HudAvatar={_hudAvatarStaticImageConfig}, CardPortrait={_cardPortraitStaticImageConfig}, DialoguePortrait={_dialoguePortraitStaticImageConfig}, GenericPortrait={_genericPortraitStaticImageConfig}, VerboseLog={_verboseLog}");
             }
         }
 

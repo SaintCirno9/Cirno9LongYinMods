@@ -66,6 +66,16 @@
 14. `StaticImageCardPortraitOffsetX=-10`
    - `StaticImageCardPortraitOffsetY=-20`
    - 卡片内肖像静态图额外偏移。
+15. `StaticImageDialoguePortraitInsetRatio=1.0`
+   - 对话界面人物肖像静态图的缩放比例。
+16. `StaticImageDialoguePortraitOffsetX=100`
+   - `StaticImageDialoguePortraitOffsetY=-100`
+   - 对话界面人物肖像静态图额外偏移。
+17. `StaticImageGenericPortraitInsetRatio=1.0`
+   - 未单独识别界面的通用肖像静态图缩放比例。
+18. `StaticImageGenericPortraitOffsetX=0`
+   - `StaticImageGenericPortraitOffsetY=0`
+   - 未单独识别界面的通用肖像静态图额外偏移。
 
 【注意事项】
 1. 如果当前还没捕获到 `GameData/SpeHeroData`，控制台会提示暂时无法按名字解析。
