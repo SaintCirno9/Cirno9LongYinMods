@@ -241,6 +241,13 @@ namespace LongYinPlayerSpeSkeleton
             EnsureStaticImageSceneConfigKeys(BattleCardPortraitStaticImageKeyPrefix, "战斗卡片肖像", "基于通用配置的额外倍率，1 表示不额外缩放", DefaultPortraitAdjustmentConfig);
             EnsureStaticImageSceneConfigKeys(BattlePortraitStaticImageKeyPrefix, "战斗当前立绘", "基于通用配置的额外倍率，1 表示不额外缩放", DefaultPortraitAdjustmentConfig);
             EnsureStaticImageSceneConfigKeys(DialoguePortraitStaticImageKeyPrefix, "对话立绘", "基于通用配置的额外倍率，1 表示不额外缩放", DefaultPortraitAdjustmentConfig);
+            EnsureConfigKeyExists(
+                "VerboseLog",
+                new[]
+                {
+                    "# VerboseLog: 是否输出详细日志",
+                    "VerboseLog=false"
+                });
             RemoveConfigKey("ReplaceInCharacterCreation");
             RemoveConfigKey("StaticImageHeroDetailOverflowBias");
         }
