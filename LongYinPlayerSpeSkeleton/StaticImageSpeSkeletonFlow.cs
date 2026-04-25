@@ -18,6 +18,8 @@ namespace LongYinPlayerSpeSkeleton
         private const string StaticPortraitContentObjectName = "Content";
 
         private static readonly HashSet<string> MissingImageWarnings = new(StringComparer.OrdinalIgnoreCase);
+        private static readonly HashSet<string> GenericPortraitContextLogs = new(StringComparer.Ordinal);
+        private static Vector2 _baseReferenceRectSize = Vector2.zero;
         private static string _cachedImagePath;
         private static DateTime _cachedImageWriteTimeUtc = DateTime.MinValue;
         private static Sprite _cachedSprite;
@@ -26,6 +28,8 @@ namespace LongYinPlayerSpeSkeleton
         internal static void NotifyConfigReloaded()
         {
             MissingImageWarnings.Clear();
+            GenericPortraitContextLogs.Clear();
+            _baseReferenceRectSize = Vector2.zero;
         }
 
         internal static bool TryApplyPlayerStaticImage(HeroData heroData, Transform targetSkeletonParent)
@@ -58,7 +62,8 @@ namespace LongYinPlayerSpeSkeleton
             }
 
             RectTransform portraitRect = portraitRootImage.transform.TryCast<RectTransform>();
-            CopyLayoutFromReference(targetSkeletonParent, portraitRect);
+            string referenceLayoutInfo = CopyLayoutFromReference(targetSkeletonParent, portraitRect);
+            CaptureBaseReferenceRectSize(targetSkeletonParent, portraitRect);
 
             Image contentImage = GetOrCreateContentImage(portraitRootImage.transform);
             if (contentImage == null)
@@ -74,7 +79,7 @@ namespace LongYinPlayerSpeSkeleton
             portraitRootImage.enabled = false;
             portraitRootImage.gameObject.SetActive(true);
 
-            ConfigureContentImage(targetSkeletonParent, portraitRect, contentImage, sprite);
+            ConfigureContentImage(targetSkeletonParent, portraitRect, contentImage, sprite, referenceLayoutInfo);
 
             SetOnlyStaticPortraitVisible(targetSkeletonParent, portraitRootImage.transform);
 
@@ -298,11 +303,11 @@ namespace LongYinPlayerSpeSkeleton
             }
         }
 
-        private static void CopyLayoutFromReference(Transform targetSkeletonParent, RectTransform portraitRect)
+        private static string CopyLayoutFromReference(Transform targetSkeletonParent, RectTransform portraitRect)
         {
             if (portraitRect == null)
             {
-                return;
+                return "reference=n/a";
             }
 
             for (int i = 0; i < targetSkeletonParent.childCount; i++)
@@ -336,7 +341,7 @@ namespace LongYinPlayerSpeSkeleton
                 portraitRect.localRotation = sourceRect.localRotation;
                 portraitRect.localPosition = sourceRect.localPosition;
                 portraitRect.SetSiblingIndex(sourceRect.GetSiblingIndex());
-                return;
+                return BuildReferenceLayoutInfo(child, sourceRect);
             }
 
             portraitRect.anchorMin = Vector2.zero;
@@ -347,12 +352,13 @@ namespace LongYinPlayerSpeSkeleton
             portraitRect.anchoredPosition3D = Vector3.zero;
             portraitRect.localScale = Vector3.one;
             portraitRect.localRotation = Quaternion.identity;
+            return "reference=<fallback>";
         }
 
         /// <summary>
-        /// 外层容器沿用原节点布局，真正显示图片的子节点再按不同界面控制尺寸。
+        /// 外层容器沿用原节点布局，真正显示图片的子节点统一使用通用肖像配置。
         /// </summary>
-        private static void ConfigureContentImage(Transform targetSkeletonParent, RectTransform portraitRect, Image contentImage, Sprite sprite)
+        private static void ConfigureContentImage(Transform targetSkeletonParent, RectTransform portraitRect, Image contentImage, Sprite sprite, string referenceLayoutInfo)
         {
             if (portraitRect == null || contentImage == null || sprite == null)
             {
@@ -370,113 +376,98 @@ namespace LongYinPlayerSpeSkeleton
             contentImage.color = Color.white;
             contentImage.enabled = true;
 
-            if (IsHeroDetailContext(targetSkeletonParent))
-            {
-                EnsureRootMask(portraitRect, enabled: true);
-                contentImage.preserveAspect = false;
-                ApplyHeroDetailContentSize(portraitRect, contentRect, sprite);
-                return;
-            }
-
-            if (Main.IsCharacterCreationContext(targetSkeletonParent))
-            {
-                EnsureRootMask(portraitRect, enabled: false);
-                contentImage.preserveAspect = false;
-                ApplyCharacterCreationContentSize(portraitRect, contentRect, sprite);
-                return;
-            }
-
-            if (IsHudAvatarContext(targetSkeletonParent))
-            {
-                EnsureRootMask(portraitRect, enabled: true);
-                contentImage.preserveAspect = false;
-                ApplyHudAvatarContentSize(portraitRect, contentRect, sprite);
-                return;
-            }
-
-            if (IsCardPortraitContext(targetSkeletonParent))
-            {
-                EnsureRootMask(portraitRect, enabled: true);
-                contentImage.preserveAspect = false;
-                ApplyCardPortraitContentSize(portraitRect, contentRect, sprite);
-                return;
-            }
-
-            if (IsDialoguePortraitContext(targetSkeletonParent))
-            {
-                EnsureRootMask(portraitRect, enabled: false);
-                contentImage.preserveAspect = true;
-                ApplyDialoguePortraitContentSize(portraitRect, contentRect, sprite);
-                return;
-            }
-
-            EnsureRootMask(portraitRect, enabled: false);
-            contentImage.preserveAspect = true;
-            ApplyGenericPortraitContentSize(portraitRect, contentRect, sprite);
+            EnsureRootMask(portraitRect, enabled: CanUseRootMask(portraitRect));
+            contentImage.preserveAspect = false;
+            StaticImageSceneConfig sceneConfig = Main.GetStaticImageSceneConfig(targetSkeletonParent);
+            LogGenericPortraitContext(targetSkeletonParent, portraitRect, referenceLayoutInfo, sceneConfig);
+            ApplyPortraitContentSize(targetSkeletonParent, portraitRect, contentRect, sprite, sceneConfig);
         }
 
-        private static void ApplyHeroDetailContentSize(RectTransform portraitRect, RectTransform contentRect, Sprite sprite)
+        private static string BuildReferenceLayoutInfo(Transform sourceTransform, RectTransform sourceRect)
+        {
+            if (sourceTransform == null || sourceRect == null)
+            {
+                return "reference=n/a";
+            }
+
+            Vector3 localPosition = sourceRect.localPosition;
+            Vector3 localScale = sourceRect.localScale;
+            return $"reference={sourceTransform.gameObject.name}, referenceRect=({sourceRect.rect.width}, {sourceRect.rect.height}), referenceAnchored=({sourceRect.anchoredPosition3D.x}, {sourceRect.anchoredPosition3D.y}, {sourceRect.anchoredPosition3D.z}), referenceLocal=({localPosition.x}, {localPosition.y}, {localPosition.z}), referenceScale=({localScale.x}, {localScale.y}, {localScale.z})";
+        }
+
+        private static void LogGenericPortraitContext(Transform targetSkeletonParent, RectTransform portraitRect, string referenceLayoutInfo, StaticImageSceneConfig sceneConfig)
+        {
+            if (!Main.VerboseLog || targetSkeletonParent == null)
+            {
+                return;
+            }
+
+            string path = Main.BuildTransformPath(targetSkeletonParent);
+            if (!GenericPortraitContextLogs.Add(path))
+            {
+                return;
+            }
+
+            string rootRectInfo = portraitRect == null
+                ? "rootRect=n/a"
+                : $"rootRect=({portraitRect.rect.width}, {portraitRect.rect.height}), rootAnchored=({portraitRect.anchoredPosition3D.x}, {portraitRect.anchoredPosition3D.y}, {portraitRect.anchoredPosition3D.z})";
+            string effectiveConfigInfo = BuildEffectiveConfigInfo(targetSkeletonParent, portraitRect, sceneConfig);
+
+            Main.Log.Msg(
+                $"静态图片模式走统一肖像布局：{Main.DescribeTransformContext(targetSkeletonParent)}, {rootRectInfo}, {referenceLayoutInfo}, config={sceneConfig}, {effectiveConfigInfo}");
+            LogAncestorMaskContext(targetSkeletonParent);
+        }
+
+        private static void LogAncestorMaskContext(Transform targetSkeletonParent)
+        {
+            if (targetSkeletonParent == null)
+            {
+                return;
+            }
+
+            Transform current = targetSkeletonParent;
+            for (int depth = 0; depth < 6 && current != null; depth++)
+            {
+                RectTransform rectTransform = current.TryCast<RectTransform>();
+                RectMask2D rectMask = current.GetComponent<RectMask2D>();
+                Mask mask = current.GetComponent<Mask>();
+                if (rectTransform != null && (rectMask != null || mask != null))
+                {
+                    Main.Log.Msg(
+                        $"  ancestorMask[{depth}] name={current.gameObject.name}, rect=({rectTransform.rect.width}, {rectTransform.rect.height}), anchored=({rectTransform.anchoredPosition3D.x}, {rectTransform.anchoredPosition3D.y}, {rectTransform.anchoredPosition3D.z}), rectMask={(rectMask != null && rectMask.enabled)}, mask={(mask != null && mask.enabled)}");
+                }
+
+                current = current.parent;
+            }
+        }
+
+        private static string BuildEffectiveConfigInfo(Transform targetSkeletonParent, RectTransform portraitRect, StaticImageSceneConfig sceneConfig)
+        {
+            if (portraitRect == null)
+            {
+                return "effective=n/a";
+            }
+
+            Vector3 rootScale = portraitRect.localScale;
+            Vector3 autoOffset = GetAutoAdjustedOffset(targetSkeletonParent, portraitRect, sceneConfig);
+            float effectiveOffsetX = autoOffset.x * rootScale.x;
+            float effectiveOffsetY = autoOffset.y * rootScale.y;
+            Vector2 baseSize = _baseReferenceRectSize == Vector2.zero
+                ? GetReferenceRectSize(portraitRect)
+                : _baseReferenceRectSize;
+            return $"baseReferenceRect=({baseSize.x}, {baseSize.y}), effectiveOffset=({effectiveOffsetX}, {effectiveOffsetY}), effectiveScale=({sceneConfig.InsetRatio * Mathf.Abs(rootScale.x)}, {sceneConfig.InsetRatio * Mathf.Abs(rootScale.y)})";
+        }
+
+        private static void ApplyPortraitContentSize(Transform targetSkeletonParent, RectTransform portraitRect, RectTransform contentRect, Sprite sprite, StaticImageSceneConfig sceneConfig)
         {
             if (portraitRect == null || contentRect == null || sprite == null)
             {
                 return;
             }
 
-            StaticImageSceneConfig sceneConfig = Main.HeroDetailStaticImageConfig;
-            float frameWidth = Mathf.Max(1f, Mathf.Abs(portraitRect.rect.width));
-            float frameHeight = Mathf.Max(1f, Mathf.Abs(portraitRect.rect.height));
-            float spriteWidth = Mathf.Max(1f, sprite.rect.width);
-            float spriteHeight = Mathf.Max(1f, sprite.rect.height);
-            float coverScale = Mathf.Max(frameWidth / spriteWidth, frameHeight / spriteHeight);
-            Vector2 coveredSize = new Vector2(spriteWidth * coverScale, spriteHeight * coverScale) * sceneConfig.InsetRatio;
-
-            // 详情页立绘更适合保留头部区域，所以改为顶部居中裁切。
-            contentRect.anchorMin = new Vector2(0.5f, 1f);
-            contentRect.anchorMax = new Vector2(0.5f, 1f);
-            contentRect.pivot = new Vector2(0.5f, 1f);
-            contentRect.sizeDelta = coveredSize;
-            contentRect.anchoredPosition3D = sceneConfig.OffsetVector3;
-            contentRect.localScale = Vector3.one;
-            contentRect.localRotation = Quaternion.identity;
-        }
-
-        private static void ApplyCharacterCreationContentSize(RectTransform portraitRect, RectTransform contentRect, Sprite sprite)
-        {
-            if (portraitRect == null || contentRect == null || sprite == null)
-            {
-                return;
-            }
-
-            StaticImageSceneConfig sceneConfig = Main.CharacterCreationStaticImageConfig;
-            float insetRatio = sceneConfig.InsetRatio;
-            float frameWidth = Mathf.Max(1f, Mathf.Abs(portraitRect.rect.width));
-            float frameHeight = Mathf.Max(1f, Mathf.Abs(portraitRect.rect.height));
-            float availableWidth = frameWidth * insetRatio;
-            float availableHeight = frameHeight * insetRatio;
-            float spriteWidth = Mathf.Max(1f, sprite.rect.width);
-            float spriteHeight = Mathf.Max(1f, sprite.rect.height);
-            float fitScale = Mathf.Min(availableWidth / spriteWidth, availableHeight / spriteHeight);
-            Vector2 fittedSize = new Vector2(spriteWidth * fitScale, spriteHeight * fitScale);
-
-            contentRect.anchorMin = new Vector2(0.5f, 0.5f);
-            contentRect.anchorMax = new Vector2(0.5f, 0.5f);
-            contentRect.pivot = new Vector2(0.5f, 0.5f);
-            contentRect.sizeDelta = fittedSize;
-            contentRect.anchoredPosition3D = sceneConfig.OffsetVector3;
-            contentRect.localScale = Vector3.one;
-            contentRect.localRotation = Quaternion.identity;
-        }
-
-        private static void ApplyHudAvatarContentSize(RectTransform portraitRect, RectTransform contentRect, Sprite sprite)
-        {
-            if (portraitRect == null || contentRect == null || sprite == null)
-            {
-                return;
-            }
-
-            StaticImageSceneConfig sceneConfig = Main.HudAvatarStaticImageConfig;
-            float frameWidth = Mathf.Max(1f, Mathf.Abs(portraitRect.rect.width));
-            float frameHeight = Mathf.Max(1f, Mathf.Abs(portraitRect.rect.height));
+            Vector2 frameSize = GetContentFrameSize(targetSkeletonParent, portraitRect);
+            float frameWidth = frameSize.x;
+            float frameHeight = frameSize.y;
             float spriteWidth = Mathf.Max(1f, sprite.rect.width);
             float spriteHeight = Mathf.Max(1f, sprite.rect.height);
             float coverScale = Mathf.Max(frameWidth / spriteWidth, frameHeight / spriteHeight);
@@ -486,69 +477,141 @@ namespace LongYinPlayerSpeSkeleton
             contentRect.anchorMax = new Vector2(0.5f, 0.5f);
             contentRect.pivot = new Vector2(0.5f, 0.5f);
             contentRect.sizeDelta = coveredSize;
-            contentRect.anchoredPosition3D = sceneConfig.OffsetVector3;
-            contentRect.localScale = Vector3.one;
+            contentRect.anchoredPosition3D = GetAutoAdjustedOffset(targetSkeletonParent, portraitRect, sceneConfig);
+            contentRect.localScale = ShouldMirrorToLeftFacing(targetSkeletonParent) ? new Vector3(-1f, 1f, 1f) : Vector3.one;
             contentRect.localRotation = Quaternion.identity;
         }
 
-        private static void ApplyCardPortraitContentSize(RectTransform portraitRect, RectTransform contentRect, Sprite sprite)
+        private static Vector3 GetAutoAdjustedOffset(Transform targetSkeletonParent, RectTransform portraitRect, StaticImageSceneConfig sceneConfig)
         {
-            if (portraitRect == null || contentRect == null || sprite == null)
+            if (portraitRect == null)
+            {
+                return sceneConfig.OffsetVector3;
+            }
+
+            Vector2 baseSize = _baseReferenceRectSize == Vector2.zero
+                ? GetReferenceRectSize(portraitRect)
+                : _baseReferenceRectSize;
+            float referenceHeight = GetOffsetReferenceHeight(targetSkeletonParent, portraitRect);
+            float heightRatio = referenceHeight / Mathf.Max(1f, baseSize.y);
+            float uniformRatio = heightRatio;
+            return new Vector3(sceneConfig.OffsetX * uniformRatio, sceneConfig.OffsetY * uniformRatio, 0f);
+        }
+
+        private static Vector2 GetContentFrameSize(Transform targetSkeletonParent, RectTransform portraitRect)
+        {
+            return GetLayoutReferenceSize(targetSkeletonParent, portraitRect);
+        }
+
+        private static float GetOffsetReferenceHeight(Transform targetSkeletonParent, RectTransform portraitRect)
+        {
+            RectTransform targetRect = targetSkeletonParent != null ? targetSkeletonParent.TryCast<RectTransform>() : null;
+            if (IsHeroIconContext(targetSkeletonParent) && targetRect != null)
+            {
+                return GetHeroIconBaseVisibleHeight(targetSkeletonParent);
+            }
+
+            return GetLayoutReferenceSize(targetSkeletonParent, portraitRect).y;
+        }
+
+        private static float GetHeroIconBaseVisibleHeight(Transform targetSkeletonParent)
+        {
+            if (IsBattleTeamHeroIconContext(targetSkeletonParent))
+            {
+                return 150f;
+            }
+
+            RectTransform targetRect = targetSkeletonParent != null ? targetSkeletonParent.TryCast<RectTransform>() : null;
+            return targetRect == null ? 150f : Mathf.Max(1f, Mathf.Abs(targetRect.rect.height));
+        }
+
+        private static Vector2 GetLayoutReferenceSize(Transform targetSkeletonParent, RectTransform portraitRect)
+        {
+            Vector2 referenceSize = GetReferenceRectSize(portraitRect);
+            if (!IsBattleNowActiveHeroContext(targetSkeletonParent) || _baseReferenceRectSize == Vector2.zero)
+            {
+                return referenceSize;
+            }
+
+            return new Vector2(
+                Mathf.Min(referenceSize.x, _baseReferenceRectSize.x),
+                Mathf.Min(referenceSize.y, _baseReferenceRectSize.y));
+        }
+
+        private static bool ShouldMirrorToLeftFacing(Transform targetSkeletonParent)
+        {
+            if (targetSkeletonParent == null)
+            {
+                return false;
+            }
+
+            string path = Main.BuildTransformPath(targetSkeletonParent);
+            return path.Contains("/HudPanel/FaceMask/Face", StringComparison.Ordinal) ||
+                   path.Contains("/HeroDetailPanel/Face", StringComparison.Ordinal) ||
+                   path.EndsWith("/BattleUIPanel/NowActiveHero/HeroSkeleton", StringComparison.Ordinal);
+        }
+
+        private static bool IsHeroIconContext(Transform targetSkeletonParent)
+        {
+            if (targetSkeletonParent == null)
+            {
+                return false;
+            }
+
+            string path = Main.BuildTransformPath(targetSkeletonParent);
+            return path.EndsWith("/HeroIcon(Clone)/Back", StringComparison.Ordinal);
+        }
+
+        private static bool IsBattleTeamHeroIconContext(Transform targetSkeletonParent)
+        {
+            if (targetSkeletonParent == null)
+            {
+                return false;
+            }
+
+            string path = Main.BuildTransformPath(targetSkeletonParent);
+            return path.Contains("/BattleTeamHeroIcon(Clone)/", StringComparison.Ordinal) &&
+                   path.EndsWith("/HeroIcon(Clone)/Back", StringComparison.Ordinal);
+        }
+
+        private static bool IsBattleNowActiveHeroContext(Transform targetSkeletonParent)
+        {
+            if (targetSkeletonParent == null)
+            {
+                return false;
+            }
+
+            string path = Main.BuildTransformPath(targetSkeletonParent);
+            return path.EndsWith("/BattleUIPanel/NowActiveHero/HeroSkeleton", StringComparison.Ordinal);
+        }
+
+        private static void CaptureBaseReferenceRectSize(Transform targetSkeletonParent, RectTransform portraitRect)
+        {
+            if (targetSkeletonParent == null || portraitRect == null)
             {
                 return;
             }
 
-            StaticImageSceneConfig sceneConfig = Main.CardPortraitStaticImageConfig;
-            float frameWidth = Mathf.Max(1f, Mathf.Abs(portraitRect.rect.width));
-            float frameHeight = Mathf.Max(1f, Mathf.Abs(portraitRect.rect.height));
-            float spriteWidth = Mathf.Max(1f, sprite.rect.width);
-            float spriteHeight = Mathf.Max(1f, sprite.rect.height);
-            float coverScale = Mathf.Max(frameWidth / spriteWidth, frameHeight / spriteHeight);
-            Vector2 coveredSize = new Vector2(spriteWidth * coverScale, spriteHeight * coverScale) * sceneConfig.InsetRatio;
-
-            contentRect.anchorMin = new Vector2(0.5f, 0.5f);
-            contentRect.anchorMax = new Vector2(0.5f, 0.5f);
-            contentRect.pivot = new Vector2(0.5f, 0.5f);
-            contentRect.sizeDelta = coveredSize;
-            contentRect.anchoredPosition3D = sceneConfig.OffsetVector3;
-            contentRect.localScale = Vector3.one;
-            contentRect.localRotation = Quaternion.identity;
-        }
-
-        private static void ApplyDialoguePortraitContentSize(RectTransform portraitRect, RectTransform contentRect, Sprite sprite)
-        {
-            if (portraitRect == null || contentRect == null || sprite == null)
+            string path = Main.BuildTransformPath(targetSkeletonParent);
+            if (!path.Contains("/HeroDetailPanel/Face", StringComparison.Ordinal) &&
+                !path.Contains("/HudPanel/FaceMask/Face", StringComparison.Ordinal))
             {
                 return;
             }
 
-            StaticImageSceneConfig sceneConfig = Main.DialoguePortraitStaticImageConfig;
-            contentRect.anchorMin = Vector2.zero;
-            contentRect.anchorMax = Vector2.one;
-            contentRect.pivot = new Vector2(0.5f, 0.5f);
-            contentRect.offsetMin = Vector2.zero;
-            contentRect.offsetMax = Vector2.zero;
-            contentRect.anchoredPosition3D = sceneConfig.OffsetVector3;
-            contentRect.localScale = new Vector3(sceneConfig.InsetRatio, sceneConfig.InsetRatio, 1f);
-            contentRect.localRotation = Quaternion.identity;
+            _baseReferenceRectSize = GetReferenceRectSize(portraitRect);
         }
 
-        private static void ApplyGenericPortraitContentSize(RectTransform portraitRect, RectTransform contentRect, Sprite sprite)
+        private static Vector2 GetReferenceRectSize(RectTransform portraitRect)
         {
-            if (portraitRect == null || contentRect == null || sprite == null)
+            if (portraitRect == null)
             {
-                return;
+                return Vector2.one;
             }
 
-            StaticImageSceneConfig sceneConfig = Main.GenericPortraitStaticImageConfig;
-            contentRect.anchorMin = Vector2.zero;
-            contentRect.anchorMax = Vector2.one;
-            contentRect.pivot = new Vector2(0.5f, 0.5f);
-            contentRect.offsetMin = Vector2.zero;
-            contentRect.offsetMax = Vector2.zero;
-            contentRect.anchoredPosition3D = sceneConfig.OffsetVector3;
-            contentRect.localScale = new Vector3(sceneConfig.InsetRatio, sceneConfig.InsetRatio, 1f);
-            contentRect.localRotation = Quaternion.identity;
+            return new Vector2(
+                Mathf.Max(1f, Mathf.Abs(portraitRect.rect.width)),
+                Mathf.Max(1f, Mathf.Abs(portraitRect.rect.height)));
         }
 
         private static void EnsureRootMask(RectTransform portraitRect, bool enabled)
@@ -576,74 +639,16 @@ namespace LongYinPlayerSpeSkeleton
             }
         }
 
-        private static bool IsHeroDetailContext(Transform targetSkeletonParent)
+        private static bool CanUseRootMask(RectTransform portraitRect)
         {
-            return targetSkeletonParent != null &&
-                   string.Equals(targetSkeletonParent.gameObject.name, "Face", StringComparison.Ordinal) &&
-                   targetSkeletonParent.parent != null &&
-                   string.Equals(targetSkeletonParent.parent.gameObject.name, "HeroDetailPanel", StringComparison.Ordinal);
+            if (portraitRect == null)
+            {
+                return false;
+            }
+
+            Vector3 scale = portraitRect.localScale;
+            return scale.x > 0f && scale.y > 0f;
         }
 
-        private static bool IsHudAvatarContext(Transform targetSkeletonParent)
-        {
-            return targetSkeletonParent != null &&
-                   string.Equals(targetSkeletonParent.gameObject.name, "Face", StringComparison.Ordinal) &&
-                   targetSkeletonParent.parent != null &&
-                   string.Equals(targetSkeletonParent.parent.gameObject.name, "FaceMask", StringComparison.Ordinal) &&
-                   targetSkeletonParent.parent.parent != null &&
-                   string.Equals(targetSkeletonParent.parent.parent.gameObject.name, "HudPanel", StringComparison.Ordinal);
-        }
-
-        private static bool IsCardPortraitContext(Transform targetSkeletonParent)
-        {
-            if (targetSkeletonParent == null || !string.Equals(targetSkeletonParent.gameObject.name, "Back", StringComparison.Ordinal))
-            {
-                return false;
-            }
-
-            RectTransform rectTransform = targetSkeletonParent.TryCast<RectTransform>();
-            if (rectTransform == null)
-            {
-                return false;
-            }
-
-            float width = Mathf.Abs(rectTransform.rect.width);
-            float height = Mathf.Abs(rectTransform.rect.height);
-            if (!(width > 0f && width <= 180f && height > 0f && height <= 220f))
-            {
-                return false;
-            }
-
-            Transform cardRoot = targetSkeletonParent.parent;
-            Transform content = cardRoot != null ? cardRoot.parent : null;
-            Transform viewport = content != null ? content.parent : null;
-
-            return cardRoot != null &&
-                   content != null &&
-                   viewport != null &&
-                   string.Equals(content.gameObject.name, "Content", StringComparison.Ordinal) &&
-                   string.Equals(viewport.gameObject.name, "Viewport", StringComparison.Ordinal);
-        }
-
-        private static bool IsDialoguePortraitContext(Transform targetSkeletonParent)
-        {
-            if (targetSkeletonParent == null)
-            {
-                return false;
-            }
-
-            string name = targetSkeletonParent.gameObject.name;
-            if (!string.Equals(name, "Face", StringComparison.Ordinal) &&
-                !string.Equals(name, "LeftFace", StringComparison.Ordinal) &&
-                !string.Equals(name, "RightFace", StringComparison.Ordinal))
-            {
-                return false;
-            }
-
-            string path = Main.BuildTransformPath(targetSkeletonParent);
-            return path.Contains("/PlotPanel/", StringComparison.Ordinal) ||
-                   path.Contains("/TalkPanel/", StringComparison.Ordinal) ||
-                   path.Contains("/HeroTalkUIPanel/", StringComparison.Ordinal);
-        }
     }
 }

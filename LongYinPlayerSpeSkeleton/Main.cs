@@ -13,7 +13,7 @@ using UnityEngine;
 using UnityEngine.Events;
 using UnityEngine.UI;
 
-[assembly: MelonInfo(typeof(LongYinPlayerSpeSkeleton.Main), "LongYinPlayerSpeSkeleton", "1.2.0", "SaintCirno9", null)]
+[assembly: MelonInfo(typeof(LongYinPlayerSpeSkeleton.Main), "LongYinPlayerSpeSkeleton", "1.3.0", "SaintCirno9", null)]
 [assembly: MelonGame("TppStudio", "LongYinLiZhiZhuan")]
 
 namespace LongYinPlayerSpeSkeleton

@@ -24,6 +24,14 @@ namespace LongYinPlayerSpeSkeleton
 
         public Vector3 OffsetVector3 => new(OffsetX, OffsetY, 0f);
 
+        public StaticImageSceneConfig ApplyAdjustment(StaticImageSceneConfig adjustment)
+        {
+            return new StaticImageSceneConfig(
+                InsetRatio * adjustment.InsetRatio,
+                OffsetX + adjustment.OffsetX,
+                OffsetY + adjustment.OffsetY);
+        }
+
         public override string ToString()
         {
             return $"InsetRatio={InsetRatio}, Offset=({OffsetX}, {OffsetY})";
@@ -37,29 +45,29 @@ namespace LongYinPlayerSpeSkeleton
         private const string HudAvatarStaticImageKeyPrefix = "StaticImageHudAvatar";
         private const string CardPortraitStaticImageKeyPrefix = "StaticImageCardPortrait";
         private const string DialoguePortraitStaticImageKeyPrefix = "StaticImageDialoguePortrait";
+        private const string BattleCardPortraitStaticImageKeyPrefix = "StaticImageBattleCardPortrait";
+        private const string BattlePortraitStaticImageKeyPrefix = "StaticImageBattlePortrait";
         private const string GenericPortraitStaticImageKeyPrefix = "StaticImageGenericPortrait";
         internal static readonly string ConfigDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "UserData", "LongYinPlayerSpeSkeleton");
         internal static readonly string ConfigPath = Path.Combine(ConfigDir, "LongYinPlayerSpeSkeleton.cfg");
         internal static readonly string PortraitsDir = Path.Combine(ConfigDir, "Portraits");
         private const string ConfigPathDisplay = "UserData\\LongYinPlayerSpeSkeleton\\LongYinPlayerSpeSkeleton.cfg";
-        private static readonly StaticImageSceneConfig DefaultHeroDetailStaticImageConfig = new(1f, 0f, -90f);
-        private static readonly StaticImageSceneConfig DefaultCharacterCreationStaticImageConfig = new(1f, 0f, -60f);
-        private static readonly StaticImageSceneConfig DefaultHudAvatarStaticImageConfig = new(0.8f, 15f, -70f);
-        private static readonly StaticImageSceneConfig DefaultCardPortraitStaticImageConfig = new(0.9f, -10f, -20f);
-        private static readonly StaticImageSceneConfig DefaultDialoguePortraitStaticImageConfig = new(1f, 100f, -100f);
         private static readonly StaticImageSceneConfig DefaultGenericPortraitStaticImageConfig = new(1f, 0f, 0f);
+        private static readonly StaticImageSceneConfig DefaultPortraitAdjustmentConfig = new(1f, 0f, 0f);
 
         private static bool _enabled = true;
         private static string _playerSpeHeroName = string.Empty;
         private static bool _replaceInCharacterCreation = true;
         private static PlayerSkeletonRenderMode _renderMode = PlayerSkeletonRenderMode.Skeleton;
         private static string _staticImagePath = @"Portraits\白云天.png";
-        private static StaticImageSceneConfig _heroDetailStaticImageConfig = DefaultHeroDetailStaticImageConfig;
-        private static StaticImageSceneConfig _characterCreationStaticImageConfig = DefaultCharacterCreationStaticImageConfig;
-        private static StaticImageSceneConfig _hudAvatarStaticImageConfig = DefaultHudAvatarStaticImageConfig;
-        private static StaticImageSceneConfig _cardPortraitStaticImageConfig = DefaultCardPortraitStaticImageConfig;
-        private static StaticImageSceneConfig _dialoguePortraitStaticImageConfig = DefaultDialoguePortraitStaticImageConfig;
         private static StaticImageSceneConfig _genericPortraitStaticImageConfig = DefaultGenericPortraitStaticImageConfig;
+        private static StaticImageSceneConfig _heroDetailStaticImageAdjustmentConfig = DefaultPortraitAdjustmentConfig;
+        private static StaticImageSceneConfig _characterCreationStaticImageAdjustmentConfig = DefaultPortraitAdjustmentConfig;
+        private static StaticImageSceneConfig _hudAvatarStaticImageAdjustmentConfig = DefaultPortraitAdjustmentConfig;
+        private static StaticImageSceneConfig _cardPortraitStaticImageAdjustmentConfig = DefaultPortraitAdjustmentConfig;
+        private static StaticImageSceneConfig _dialoguePortraitStaticImageAdjustmentConfig = DefaultPortraitAdjustmentConfig;
+        private static StaticImageSceneConfig _battleCardPortraitStaticImageAdjustmentConfig = DefaultPortraitAdjustmentConfig;
+        private static StaticImageSceneConfig _battlePortraitStaticImageAdjustmentConfig = DefaultPortraitAdjustmentConfig;
         private static bool _verboseLog;
         private static DateTime _configLastWriteTimeUtc = DateTime.MinValue;
 
@@ -117,51 +125,6 @@ namespace LongYinPlayerSpeSkeleton
             }
         }
 
-        internal static StaticImageSceneConfig HeroDetailStaticImageConfig
-        {
-            get
-            {
-                EnsureConfigLoaded();
-                return _heroDetailStaticImageConfig;
-            }
-        }
-
-        internal static StaticImageSceneConfig CharacterCreationStaticImageConfig
-        {
-            get
-            {
-                EnsureConfigLoaded();
-                return _characterCreationStaticImageConfig;
-            }
-        }
-
-        internal static StaticImageSceneConfig HudAvatarStaticImageConfig
-        {
-            get
-            {
-                EnsureConfigLoaded();
-                return _hudAvatarStaticImageConfig;
-            }
-        }
-
-        internal static StaticImageSceneConfig CardPortraitStaticImageConfig
-        {
-            get
-            {
-                EnsureConfigLoaded();
-                return _cardPortraitStaticImageConfig;
-            }
-        }
-
-        internal static StaticImageSceneConfig DialoguePortraitStaticImageConfig
-        {
-            get
-            {
-                EnsureConfigLoaded();
-                return _dialoguePortraitStaticImageConfig;
-            }
-        }
-
         internal static StaticImageSceneConfig GenericPortraitStaticImageConfig
         {
             get
@@ -169,6 +132,62 @@ namespace LongYinPlayerSpeSkeleton
                 EnsureConfigLoaded();
                 return _genericPortraitStaticImageConfig;
             }
+        }
+
+        internal static StaticImageSceneConfig GetStaticImageSceneConfig(Transform targetSkeletonParent)
+        {
+            EnsureConfigLoaded();
+            StaticImageSceneConfig adjustmentConfig = GetStaticImageSceneAdjustmentConfig(targetSkeletonParent);
+            return ClampStaticImageSceneConfig(_genericPortraitStaticImageConfig.ApplyAdjustment(adjustmentConfig));
+        }
+
+        private static StaticImageSceneConfig GetStaticImageSceneAdjustmentConfig(Transform targetSkeletonParent)
+        {
+            if (targetSkeletonParent == null)
+            {
+                return DefaultPortraitAdjustmentConfig;
+            }
+
+            string path = BuildTransformPath(targetSkeletonParent);
+            if (path.StartsWith("Canvas/StartMenu/", StringComparison.Ordinal))
+            {
+                return _characterCreationStaticImageAdjustmentConfig;
+            }
+
+            if (path.EndsWith("/BattleUIPanel/NowActiveHero/HeroSkeleton", StringComparison.Ordinal))
+            {
+                return _battlePortraitStaticImageAdjustmentConfig;
+            }
+
+            if (path.Contains("/BattleTeamHeroIcon(Clone)/", StringComparison.Ordinal) &&
+                path.EndsWith("/HeroIcon(Clone)/Back", StringComparison.Ordinal))
+            {
+                return _battleCardPortraitStaticImageAdjustmentConfig;
+            }
+
+            if (path.EndsWith("/HeroIcon(Clone)/Back", StringComparison.Ordinal))
+            {
+                return _cardPortraitStaticImageAdjustmentConfig;
+            }
+
+            if (path.Contains("/HudPanel/FaceMask/Face", StringComparison.Ordinal))
+            {
+                return _hudAvatarStaticImageAdjustmentConfig;
+            }
+
+            if (path.Contains("/HeroDetailPanel/Face", StringComparison.Ordinal))
+            {
+                return _heroDetailStaticImageAdjustmentConfig;
+            }
+
+            if (path.Contains("/PlotPanel/", StringComparison.Ordinal) ||
+                path.Contains("/TalkPanel/", StringComparison.Ordinal) ||
+                path.Contains("/HeroTalkUIPanel/", StringComparison.Ordinal))
+            {
+                return _dialoguePortraitStaticImageAdjustmentConfig;
+            }
+
+            return DefaultPortraitAdjustmentConfig;
         }
 
         internal static void EnsureConfigLoaded()
@@ -214,12 +233,14 @@ namespace LongYinPlayerSpeSkeleton
                     "# StaticImagePath: 静态图片路径，可写绝对路径，也可写相对 UserData\\LongYinPlayerSpeSkeleton 的路径",
                     @"StaticImagePath=Portraits\白云天.png"
                 });
-            EnsureStaticImageSceneConfigKeys(HeroDetailStaticImageKeyPrefix, "人物详情界面", string.Empty, DefaultHeroDetailStaticImageConfig);
-            EnsureStaticImageSceneConfigKeys(CharacterCreationStaticImageKeyPrefix, "创建人物界面", string.Empty, DefaultCharacterCreationStaticImageConfig);
-            EnsureStaticImageSceneConfigKeys(HudAvatarStaticImageKeyPrefix, "左上角头像界面", string.Empty, DefaultHudAvatarStaticImageConfig);
-            EnsureStaticImageSceneConfigKeys(CardPortraitStaticImageKeyPrefix, "卡片肖像界面", string.Empty, DefaultCardPortraitStaticImageConfig);
-            EnsureStaticImageSceneConfigKeys(DialoguePortraitStaticImageKeyPrefix, "对话界面人物肖像", string.Empty, DefaultDialoguePortraitStaticImageConfig);
-            EnsureStaticImageSceneConfigKeys(GenericPortraitStaticImageKeyPrefix, "通用肖像", string.Empty, DefaultGenericPortraitStaticImageConfig);
+            EnsureStaticImageSceneConfigKeys(GenericPortraitStaticImageKeyPrefix, "通用静态肖像", string.Empty, DefaultGenericPortraitStaticImageConfig);
+            EnsureStaticImageSceneConfigKeys(HeroDetailStaticImageKeyPrefix, "人物详情肖像", "基于通用配置的额外倍率，1 表示不额外缩放", DefaultPortraitAdjustmentConfig);
+            EnsureStaticImageSceneConfigKeys(CharacterCreationStaticImageKeyPrefix, "创建人物肖像", "基于通用配置的额外倍率，1 表示不额外缩放", DefaultPortraitAdjustmentConfig);
+            EnsureStaticImageSceneConfigKeys(HudAvatarStaticImageKeyPrefix, "左上角头像", "基于通用配置的额外倍率，1 表示不额外缩放", DefaultPortraitAdjustmentConfig);
+            EnsureStaticImageSceneConfigKeys(CardPortraitStaticImageKeyPrefix, "普通卡片肖像", "基于通用配置的额外倍率，1 表示不额外缩放", DefaultPortraitAdjustmentConfig);
+            EnsureStaticImageSceneConfigKeys(BattleCardPortraitStaticImageKeyPrefix, "战斗卡片肖像", "基于通用配置的额外倍率，1 表示不额外缩放", DefaultPortraitAdjustmentConfig);
+            EnsureStaticImageSceneConfigKeys(BattlePortraitStaticImageKeyPrefix, "战斗当前立绘", "基于通用配置的额外倍率，1 表示不额外缩放", DefaultPortraitAdjustmentConfig);
+            EnsureStaticImageSceneConfigKeys(DialoguePortraitStaticImageKeyPrefix, "对话立绘", "基于通用配置的额外倍率，1 表示不额外缩放", DefaultPortraitAdjustmentConfig);
             RemoveConfigKey("ReplaceInCharacterCreation");
             RemoveConfigKey("StaticImageHeroDetailOverflowBias");
         }
@@ -244,12 +265,14 @@ namespace LongYinPlayerSpeSkeleton
                 string.Empty
             };
 
-            lines.AddRange(BuildStaticImageSceneConfigLines(HeroDetailStaticImageKeyPrefix, "人物详情界面", string.Empty, DefaultHeroDetailStaticImageConfig));
-            lines.AddRange(BuildStaticImageSceneConfigLines(CharacterCreationStaticImageKeyPrefix, "创建人物界面", string.Empty, DefaultCharacterCreationStaticImageConfig));
-            lines.AddRange(BuildStaticImageSceneConfigLines(HudAvatarStaticImageKeyPrefix, "左上角头像界面", string.Empty, DefaultHudAvatarStaticImageConfig));
-            lines.AddRange(BuildStaticImageSceneConfigLines(CardPortraitStaticImageKeyPrefix, "卡片肖像界面", string.Empty, DefaultCardPortraitStaticImageConfig));
-            lines.AddRange(BuildStaticImageSceneConfigLines(DialoguePortraitStaticImageKeyPrefix, "对话界面人物肖像", string.Empty, DefaultDialoguePortraitStaticImageConfig));
-            lines.AddRange(BuildStaticImageSceneConfigLines(GenericPortraitStaticImageKeyPrefix, "通用肖像", string.Empty, DefaultGenericPortraitStaticImageConfig));
+            lines.AddRange(BuildStaticImageSceneConfigLines(GenericPortraitStaticImageKeyPrefix, "通用静态肖像", string.Empty, DefaultGenericPortraitStaticImageConfig));
+            lines.AddRange(BuildStaticImageSceneConfigLines(HeroDetailStaticImageKeyPrefix, "人物详情肖像", "基于通用配置的额外倍率，1 表示不额外缩放", DefaultPortraitAdjustmentConfig));
+            lines.AddRange(BuildStaticImageSceneConfigLines(CharacterCreationStaticImageKeyPrefix, "创建人物肖像", "基于通用配置的额外倍率，1 表示不额外缩放", DefaultPortraitAdjustmentConfig));
+            lines.AddRange(BuildStaticImageSceneConfigLines(HudAvatarStaticImageKeyPrefix, "左上角头像", "基于通用配置的额外倍率，1 表示不额外缩放", DefaultPortraitAdjustmentConfig));
+            lines.AddRange(BuildStaticImageSceneConfigLines(CardPortraitStaticImageKeyPrefix, "普通卡片肖像", "基于通用配置的额外倍率，1 表示不额外缩放", DefaultPortraitAdjustmentConfig));
+            lines.AddRange(BuildStaticImageSceneConfigLines(BattleCardPortraitStaticImageKeyPrefix, "战斗卡片肖像", "基于通用配置的额外倍率，1 表示不额外缩放", DefaultPortraitAdjustmentConfig));
+            lines.AddRange(BuildStaticImageSceneConfigLines(BattlePortraitStaticImageKeyPrefix, "战斗当前立绘", "基于通用配置的额外倍率，1 表示不额外缩放", DefaultPortraitAdjustmentConfig));
+            lines.AddRange(BuildStaticImageSceneConfigLines(DialoguePortraitStaticImageKeyPrefix, "对话立绘", "基于通用配置的额外倍率，1 表示不额外缩放", DefaultPortraitAdjustmentConfig));
             lines.AddRange(
                 new[]
                 {
@@ -264,12 +287,13 @@ namespace LongYinPlayerSpeSkeleton
         private static IEnumerable<string> BuildStaticImageSceneConfigLines(string keyPrefix, string sceneLabel, string insetDescription, StaticImageSceneConfig defaultConfig)
         {
             string insetComment = BuildInsetComment(keyPrefix, sceneLabel, insetDescription);
+            string offsetComment = BuildOffsetComment(keyPrefix, sceneLabel, insetDescription);
             return new[]
             {
                 insetComment,
                 $"{keyPrefix}InsetRatio={FormatFloatForConfig(defaultConfig.InsetRatio)}",
                 string.Empty,
-                $"# {keyPrefix}OffsetX / {keyPrefix}OffsetY: {sceneLabel}静态图额外偏移",
+                offsetComment,
                 $"{keyPrefix}OffsetX={FormatFloatForConfig(defaultConfig.OffsetX)}",
                 $"{keyPrefix}OffsetY={FormatFloatForConfig(defaultConfig.OffsetY)}",
                 string.Empty
@@ -279,6 +303,7 @@ namespace LongYinPlayerSpeSkeleton
         private static void EnsureStaticImageSceneConfigKeys(string keyPrefix, string sceneLabel, string insetDescription, StaticImageSceneConfig defaultConfig)
         {
             string insetComment = BuildInsetComment(keyPrefix, sceneLabel, insetDescription);
+            string offsetComment = BuildOffsetComment(keyPrefix, sceneLabel, insetDescription);
             EnsureConfigKeyExists(
                 $"{keyPrefix}InsetRatio",
                 new[]
@@ -290,10 +315,11 @@ namespace LongYinPlayerSpeSkeleton
                 new[] { $"{keyPrefix}OffsetX", $"{keyPrefix}OffsetY" },
                 new[]
                 {
-                    $"# {keyPrefix}OffsetX / {keyPrefix}OffsetY: {sceneLabel}静态图额外偏移",
+                    offsetComment,
                     $"{keyPrefix}OffsetX={FormatFloatForConfig(defaultConfig.OffsetX)}",
                     $"{keyPrefix}OffsetY={FormatFloatForConfig(defaultConfig.OffsetY)}"
                 });
+            UpdateStaticImageSceneConfigComments(keyPrefix, insetComment, offsetComment);
         }
 
         private static string BuildInsetComment(string keyPrefix, string sceneLabel, string insetDescription)
@@ -302,6 +328,50 @@ namespace LongYinPlayerSpeSkeleton
             return string.IsNullOrWhiteSpace(insetDescription)
                 ? baseComment
                 : $"{baseComment}，{insetDescription}";
+        }
+
+        private static string BuildOffsetComment(string keyPrefix, string sceneLabel, string insetDescription)
+        {
+            string baseComment = $"# {keyPrefix}OffsetX / {keyPrefix}OffsetY: {sceneLabel}静态图额外偏移";
+            return string.IsNullOrWhiteSpace(insetDescription)
+                ? baseComment
+                : $"{baseComment}，基于通用配置叠加，0 表示不额外偏移";
+        }
+
+        private static void UpdateStaticImageSceneConfigComments(string keyPrefix, string insetComment, string offsetComment)
+        {
+            if (!File.Exists(ConfigPath))
+            {
+                return;
+            }
+
+            string[] lines = File.ReadAllLines(ConfigPath);
+            bool changed = false;
+            for (int i = 0; i < lines.Length; i++)
+            {
+                string trimmedLine = lines[i].Trim();
+                if (trimmedLine.StartsWith("# " + keyPrefix + "InsetRatio:", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (!string.Equals(lines[i], insetComment, StringComparison.Ordinal))
+                    {
+                        lines[i] = insetComment;
+                        changed = true;
+                    }
+                }
+                else if (trimmedLine.StartsWith("# " + keyPrefix + "OffsetX / " + keyPrefix + "OffsetY:", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (!string.Equals(lines[i], offsetComment, StringComparison.Ordinal))
+                    {
+                        lines[i] = offsetComment;
+                        changed = true;
+                    }
+                }
+            }
+
+            if (changed)
+            {
+                File.WriteAllLines(ConfigPath, lines, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
+            }
         }
 
         private static void EnsureConfigKeyExists(string key, string[] defaultLines)
@@ -428,12 +498,14 @@ namespace LongYinPlayerSpeSkeleton
             string playerSpeHeroName = string.Empty;
             PlayerSkeletonRenderMode renderMode = PlayerSkeletonRenderMode.Skeleton;
             string staticImagePath = @"Portraits\白云天.png";
-            StaticImageSceneConfig heroDetailConfig = DefaultHeroDetailStaticImageConfig;
-            StaticImageSceneConfig characterCreationConfig = DefaultCharacterCreationStaticImageConfig;
-            StaticImageSceneConfig hudAvatarConfig = DefaultHudAvatarStaticImageConfig;
-            StaticImageSceneConfig cardPortraitConfig = DefaultCardPortraitStaticImageConfig;
-            StaticImageSceneConfig dialoguePortraitConfig = DefaultDialoguePortraitStaticImageConfig;
             StaticImageSceneConfig genericPortraitConfig = DefaultGenericPortraitStaticImageConfig;
+            StaticImageSceneConfig heroDetailAdjustmentConfig = DefaultPortraitAdjustmentConfig;
+            StaticImageSceneConfig characterCreationAdjustmentConfig = DefaultPortraitAdjustmentConfig;
+            StaticImageSceneConfig hudAvatarAdjustmentConfig = DefaultPortraitAdjustmentConfig;
+            StaticImageSceneConfig cardPortraitAdjustmentConfig = DefaultPortraitAdjustmentConfig;
+            StaticImageSceneConfig dialoguePortraitAdjustmentConfig = DefaultPortraitAdjustmentConfig;
+            StaticImageSceneConfig battleCardPortraitAdjustmentConfig = DefaultPortraitAdjustmentConfig;
+            StaticImageSceneConfig battlePortraitAdjustmentConfig = DefaultPortraitAdjustmentConfig;
             bool verboseLog = false;
 
             foreach (string rawLine in File.ReadAllLines(ConfigPath))
@@ -472,22 +544,28 @@ namespace LongYinPlayerSpeSkeleton
                 {
                     staticImagePath = value;
                 }
-                else if (TryApplyStaticImageSceneConfigValue(ref heroDetailConfig, HeroDetailStaticImageKeyPrefix, key, value))
-                {
-                }
-                else if (TryApplyStaticImageSceneConfigValue(ref characterCreationConfig, CharacterCreationStaticImageKeyPrefix, key, value))
-                {
-                }
-                else if (TryApplyStaticImageSceneConfigValue(ref hudAvatarConfig, HudAvatarStaticImageKeyPrefix, key, value))
-                {
-                }
-                else if (TryApplyStaticImageSceneConfigValue(ref cardPortraitConfig, CardPortraitStaticImageKeyPrefix, key, value))
-                {
-                }
-                else if (TryApplyStaticImageSceneConfigValue(ref dialoguePortraitConfig, DialoguePortraitStaticImageKeyPrefix, key, value))
-                {
-                }
                 else if (TryApplyStaticImageSceneConfigValue(ref genericPortraitConfig, GenericPortraitStaticImageKeyPrefix, key, value))
+                {
+                }
+                else if (TryApplyStaticImageSceneConfigValue(ref heroDetailAdjustmentConfig, HeroDetailStaticImageKeyPrefix, key, value))
+                {
+                }
+                else if (TryApplyStaticImageSceneConfigValue(ref characterCreationAdjustmentConfig, CharacterCreationStaticImageKeyPrefix, key, value))
+                {
+                }
+                else if (TryApplyStaticImageSceneConfigValue(ref hudAvatarAdjustmentConfig, HudAvatarStaticImageKeyPrefix, key, value))
+                {
+                }
+                else if (TryApplyStaticImageSceneConfigValue(ref cardPortraitAdjustmentConfig, CardPortraitStaticImageKeyPrefix, key, value))
+                {
+                }
+                else if (TryApplyStaticImageSceneConfigValue(ref battleCardPortraitAdjustmentConfig, BattleCardPortraitStaticImageKeyPrefix, key, value))
+                {
+                }
+                else if (TryApplyStaticImageSceneConfigValue(ref battlePortraitAdjustmentConfig, BattlePortraitStaticImageKeyPrefix, key, value))
+                {
+                }
+                else if (TryApplyStaticImageSceneConfigValue(ref dialoguePortraitAdjustmentConfig, DialoguePortraitStaticImageKeyPrefix, key, value))
                 {
                 }
                 else if (key.Equals("VerboseLog", StringComparison.OrdinalIgnoreCase))
@@ -503,12 +581,14 @@ namespace LongYinPlayerSpeSkeleton
             _playerSpeHeroName = playerSpeHeroName;
             _renderMode = renderMode;
             _staticImagePath = staticImagePath;
-            _heroDetailStaticImageConfig = ClampStaticImageSceneConfig(heroDetailConfig);
-            _characterCreationStaticImageConfig = ClampStaticImageSceneConfig(characterCreationConfig);
-            _hudAvatarStaticImageConfig = ClampStaticImageSceneConfig(hudAvatarConfig);
-            _cardPortraitStaticImageConfig = ClampStaticImageSceneConfig(cardPortraitConfig);
-            _dialoguePortraitStaticImageConfig = ClampStaticImageSceneConfig(dialoguePortraitConfig);
             _genericPortraitStaticImageConfig = ClampStaticImageSceneConfig(genericPortraitConfig);
+            _heroDetailStaticImageAdjustmentConfig = ClampStaticImageSceneConfig(heroDetailAdjustmentConfig);
+            _characterCreationStaticImageAdjustmentConfig = ClampStaticImageSceneConfig(characterCreationAdjustmentConfig);
+            _hudAvatarStaticImageAdjustmentConfig = ClampStaticImageSceneConfig(hudAvatarAdjustmentConfig);
+            _cardPortraitStaticImageAdjustmentConfig = ClampStaticImageSceneConfig(cardPortraitAdjustmentConfig);
+            _dialoguePortraitStaticImageAdjustmentConfig = ClampStaticImageSceneConfig(dialoguePortraitAdjustmentConfig);
+            _battleCardPortraitStaticImageAdjustmentConfig = ClampStaticImageSceneConfig(battleCardPortraitAdjustmentConfig);
+            _battlePortraitStaticImageAdjustmentConfig = ClampStaticImageSceneConfig(battlePortraitAdjustmentConfig);
             _verboseLog = verboseLog;
             _configLastWriteTimeUtc = File.GetLastWriteTimeUtc(ConfigPath);
             SpeHeroResolutionWarnings.Clear();
@@ -519,7 +599,7 @@ namespace LongYinPlayerSpeSkeleton
             {
                 Log.Msg(
                     System.ConsoleColor.Cyan,
-                    $"已读取配置：Enabled={_enabled}, PlayerSpeHeroName={(_playerSpeHeroName.Length == 0 ? "<空>" : _playerSpeHeroName)}, RenderMode={(int)_renderMode}, StaticImagePath={(_staticImagePath.Length == 0 ? "<空>" : _staticImagePath)}, HeroDetail={_heroDetailStaticImageConfig}, CharacterCreation={_characterCreationStaticImageConfig}, HudAvatar={_hudAvatarStaticImageConfig}, CardPortrait={_cardPortraitStaticImageConfig}, DialoguePortrait={_dialoguePortraitStaticImageConfig}, GenericPortrait={_genericPortraitStaticImageConfig}, VerboseLog={_verboseLog}");
+                    $"已读取配置：Enabled={_enabled}, PlayerSpeHeroName={(_playerSpeHeroName.Length == 0 ? "<空>" : _playerSpeHeroName)}, RenderMode={(int)_renderMode}, StaticImagePath={(_staticImagePath.Length == 0 ? "<空>" : _staticImagePath)}, GenericPortrait={_genericPortraitStaticImageConfig}, VerboseLog={_verboseLog}");
             }
         }
 
