@@ -49,8 +49,8 @@
 7. `StaticImageGenericPortraitInsetRatio=1.0`
    - 所有静态肖像的通用缩放比例。
    - 静态图片会先按原版立绘容器等比填满，超出容器的部分会被裁掉；这个比例是在自动填满后的额外倍率。
-8. `StaticImageGenericPortraitOffsetX=0`
-   - `StaticImageGenericPortraitOffsetY=0`
+8. `StaticImageGenericPortraitOffsetX=20`
+   - `StaticImageGenericPortraitOffsetY=-120`
    - 所有静态肖像的通用额外偏移。
    - Mod 会按原版立绘参考框大小自动换算不同界面的实际偏移，并继续保留原版节点的缩放和镜像。
 9. 各路径增量配置

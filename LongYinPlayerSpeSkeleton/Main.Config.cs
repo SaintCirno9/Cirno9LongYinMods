@@ -52,7 +52,7 @@ namespace LongYinPlayerSpeSkeleton
         internal static readonly string ConfigPath = Path.Combine(ConfigDir, "LongYinPlayerSpeSkeleton.cfg");
         internal static readonly string PortraitsDir = Path.Combine(ConfigDir, "Portraits");
         private const string ConfigPathDisplay = "UserData\\LongYinPlayerSpeSkeleton\\LongYinPlayerSpeSkeleton.cfg";
-        private static readonly StaticImageSceneConfig DefaultGenericPortraitStaticImageConfig = new(1f, 0f, 0f);
+        private static readonly StaticImageSceneConfig DefaultGenericPortraitStaticImageConfig = new(1f, 20f, -120f);
         private static readonly StaticImageSceneConfig DefaultPortraitAdjustmentConfig = new(1f, 0f, 0f);
 
         private static bool _enabled = true;
