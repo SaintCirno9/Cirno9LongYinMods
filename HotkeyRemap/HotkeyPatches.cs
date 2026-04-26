@@ -68,8 +68,52 @@ namespace HotkeyRemap
                 return;
             }
 
+            TryHandleShowMapHotkey();
             TryHandleHudHeroDetailHotkey(controller);
             TryHandleLeaveCityHotkey();
+        }
+
+        private static void TryHandleShowMapHotkey()
+        {
+            KeyCode mappedKey = Main.Config.ShowMap;
+            if (mappedKey == KeyCode.None || !Input.GetKeyDown(mappedKey))
+            {
+                return;
+            }
+
+            if (GlobalData.IsInputing())
+            {
+                return;
+            }
+
+            QuickTravelUIController quickTravelUIController = QuickTravelUIController.Instance;
+            if (quickTravelUIController == null)
+            {
+                return;
+            }
+
+            if (quickTravelUIController.quickTravelUI != null && quickTravelUIController.quickTravelUI.activeSelf)
+            {
+                if (Main.Config.VerboseLog)
+                {
+                    Main.Log.Msg("显示地图热键将关闭当前地图界面。");
+                }
+
+                quickTravelUIController.HideQuickTravelUI();
+                return;
+            }
+
+            if (PlotController.Instance != null && PlotController.Instance.plotTextShowing)
+            {
+                return;
+            }
+
+            if (Main.Config.VerboseLog)
+            {
+                Main.Log.Msg($"检测到显示地图热键：{mappedKey}。");
+            }
+
+            quickTravelUIController.ShowQuickTravelUIShowType();
         }
 
         private static void TryHandleHudHeroDetailHotkey(HudController controller)

@@ -31,6 +31,7 @@ namespace HotkeyRemap
             new("剧情推进", () => Main.Config.PlotAdvance, key => Main.Config.PlotAdvance = key),
             new("人物详情", () => Main.Config.HeroDetail, key => Main.Config.HeroDetail = key),
             new("离开城市", () => Main.Config.LeaveCity, key => Main.Config.LeaveCity = key),
+            new("显示地图", () => Main.Config.ShowMap, key => Main.Config.ShowMap = key),
             new("战斗自动", () => Main.Config.BattleAutoToggle, key => Main.Config.BattleAutoToggle = key),
             new("战斗动作 W", () => Main.Config.BattleActionFastW, key => Main.Config.BattleActionFastW = key),
             new("战斗动作 E", () => Main.Config.BattleActionFastE, key => Main.Config.BattleActionFastE = key),

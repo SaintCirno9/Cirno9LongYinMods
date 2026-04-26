@@ -11,11 +11,12 @@ HotkeyRemap
 8. `PlotAdvance`：剧情推进
 9. `HeroDetail`：主场景人物详情
 10. `LeaveCity`：离开城市 / 返回大地图
-11. `BattleAutoToggle`：战斗自动
-12. `BattleActionFastW/E/S/D/X/C`：战斗动作快捷键
-13. `StudyUp/StudyDown/StudyLeft/StudyRight`：修炼方向键
-14. `UiSubmit/UiCancel`：界面确认/取消
-15. 设置菜单内已提供 `热键设置` 入口，可在游戏内直接修改键位并保存到配置文件。
+11. `ShowMap`：显示地图
+12. `BattleAutoToggle`：战斗自动
+13. `BattleActionFastW/E/S/D/X/C`：战斗动作快捷键
+14. `StudyUp/StudyDown/StudyLeft/StudyRight`：修炼方向键
+15. `UiSubmit/UiCancel`：界面确认/取消
+16. 设置菜单内已提供 `热键设置` 入口，可在游戏内直接修改键位并保存到配置文件。
 
 安装：
 1. 确保游戏已安装 MelonLoader。
@@ -47,27 +48,29 @@ HotkeyRemap
 9. `PlotAdvance=Space`
 10. `HeroDetail=Q`
 11. `LeaveCity=E`
-12. `BattleAutoToggle=F2`
-13. `BattleActionFastW=W`
-14. `BattleActionFastE=E`
-15. `BattleActionFastS=S`
-16. `BattleActionFastD=D`
-17. `BattleActionFastX=X`
-18. `BattleActionFastC=C`
-19. `StudyUp=W`
-20. `StudyDown=S`
-21. `StudyLeft=A`
-22. `StudyRight=D`
-23. `UiSubmit=Return`
-24. `UiCancel=Escape`
+12. `ShowMap=M`
+13. `BattleAutoToggle=F2`
+14. `BattleActionFastW=W`
+15. `BattleActionFastE=E`
+16. `BattleActionFastS=S`
+17. `BattleActionFastD=D`
+18. `BattleActionFastX=X`
+19. `BattleActionFastC=C`
+20. `StudyUp=W`
+21. `StudyDown=S`
+22. `StudyLeft=A`
+23. `StudyRight=D`
+24. `UiSubmit=Return`
+25. `UiCancel=Escape`
 
 实现说明：
 1. `HeroDetail=Q` 时保留原版人物详情逻辑，不由 mod 接管。
 2. 只有当 `HeroDetail` 改成非 `Q` 键位时，才会由 `HudController.Update` 和原生补丁接管。
 3. `LeaveCity` 使用 `HudController.Update` 接管，并直接调用 `AreaController.ReturnBigMapButtonClicked()`，保留原版离城剧情和返回大地图逻辑。
-4. `BattleActionFastW/E/S/D/X/C` 会重写战斗动作快捷键列表。
-5. 设置菜单入口与热键面板为运行时注入，不修改原游戏资源文件。
+4. `ShowMap` 使用 `HudController.Update` 接管，并调用 `QuickTravelUIController.ShowQuickTravelUIShowType()` 显示地图界面。
+5. `BattleActionFastW/E/S/D/X/C` 会重写战斗动作快捷键列表。
+6. 设置菜单入口与热键面板为运行时注入，不修改原游戏资源文件。
 
 发布文件：
 1. DLL：`HotkeyRemap.dll`
-2. 压缩包：`HotkeyRemap-v1.1.1.zip`
+2. 压缩包：`HotkeyRemap-v1.2.0.zip`

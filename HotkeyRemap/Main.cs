@@ -3,7 +3,7 @@ using HarmonyLib;
 using Il2Cpp;
 using System;
 
-[assembly: MelonInfo(typeof(HotkeyRemap.Main), "HotkeyRemap", "1.1.1", "SaintCirno9", null)]
+[assembly: MelonInfo(typeof(HotkeyRemap.Main), "HotkeyRemap", "1.2.0", "SaintCirno9", null)]
 [assembly: MelonGame("TppStudio", "LongYinLiZhiZhuan")]
 
 namespace HotkeyRemap

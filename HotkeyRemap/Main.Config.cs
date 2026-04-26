@@ -30,6 +30,8 @@ namespace HotkeyRemap
 
         internal KeyCode LeaveCity { get; set; } = KeyCode.E;
 
+        internal KeyCode ShowMap { get; set; } = KeyCode.M;
+
         internal KeyCode BattleAutoToggle { get; set; } = KeyCode.F2;
 
         internal KeyCode BattleActionFastW { get; set; } = KeyCode.W;
@@ -130,6 +132,7 @@ namespace HotkeyRemap
             bool seenPlotAdvance = false;
             bool seenHeroDetail = false;
             bool seenLeaveCity = false;
+            bool seenShowMap = false;
             bool seenBattleAutoToggle = false;
             bool seenBattleActionFastW = false;
             bool seenBattleActionFastE = false;
@@ -199,6 +202,9 @@ namespace HotkeyRemap
                     case "LeaveCity":
                         isValid &= TryAssignKey(value, parsed => config.LeaveCity = parsed, "LeaveCity", log, ref seenLeaveCity);
                         break;
+                    case "ShowMap":
+                        isValid &= TryAssignKey(value, parsed => config.ShowMap = parsed, "ShowMap", log, ref seenShowMap);
+                        break;
                     case "BattleAutoToggle":
                         isValid &= TryAssignKey(value, parsed => config.BattleAutoToggle = parsed, "BattleAutoToggle", log, ref seenBattleAutoToggle);
                         break;
@@ -257,6 +263,7 @@ namespace HotkeyRemap
                 && seenPlotAdvance
                 && seenHeroDetail
                 && seenLeaveCity
+                && seenShowMap
                 && seenBattleAutoToggle
                 && seenBattleActionFastW
                 && seenBattleActionFastE
@@ -352,6 +359,7 @@ namespace HotkeyRemap
                     $"PlotAdvance={config.PlotAdvance}",
                     $"HeroDetail={config.HeroDetail}",
                     $"LeaveCity={config.LeaveCity}",
+                    $"ShowMap={config.ShowMap}",
                     $"BattleAutoToggle={config.BattleAutoToggle}",
                     $"BattleActionFastW={config.BattleActionFastW}",
                     $"BattleActionFastE={config.BattleActionFastE}",
