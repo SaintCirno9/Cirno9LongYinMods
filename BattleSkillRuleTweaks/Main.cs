@@ -21,6 +21,7 @@ namespace BattleSkillRuleTweaks
         public override void OnInitializeMelon()
         {
             PatchBattleUnitAttackEndMoveNext();
+            PatchPlayBattleUnitMoveMoveNext();
             Log.Msg("BattleSkillRuleTweaks 已加载。");
         }
 
@@ -40,12 +41,33 @@ namespace BattleSkillRuleTweaks
             HarmonyInstance.Patch(moveNext, postfix: new HarmonyMethod(postfix));
         }
 
+        private void PatchPlayBattleUnitMoveMoveNext()
+        {
+            Type iteratorType = FindBattleControllerIteratorType("PlayBattleUnitMove");
+            MethodInfo moveNext = AccessTools.Method(iteratorType, "MoveNext");
+            MethodInfo postfix = AccessTools.Method(typeof(BattleController_PlayBattleUnitMove_MoveNext_Patch), nameof(BattleController_PlayBattleUnitMove_MoveNext_Patch.Postfix));
+
+            if (iteratorType == null || moveNext == null || postfix == null)
+            {
+                Log.Error("未找到 PlayBattleUnitMove 协程补丁入口。");
+                LogIteratorTypes();
+                return;
+            }
+
+            HarmonyInstance.Patch(moveNext, postfix: new HarmonyMethod(postfix));
+        }
+
         private static Type FindBattleUnitAttackEndIteratorType()
+        {
+            return FindBattleControllerIteratorType("BattleUnitAttackEnd");
+        }
+
+        private static Type FindBattleControllerIteratorType(string name)
         {
             Type[] nestedTypes = typeof(BattleController).GetNestedTypes(BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
             foreach (Type nestedType in nestedTypes)
             {
-                if (nestedType.Name.Contains("BattleUnitAttackEnd"))
+                if (nestedType.Name.Contains(name))
                 {
                     return nestedType;
                 }
@@ -222,15 +244,10 @@ namespace BattleSkillRuleTweaks
             heroData.SetNowActiveSkill(null);
         }
 
-        private static void TryContinueAiTurn(BattleController controller, BattleUnit nowActiveUnit, HeroData heroData, KungfuSkillLvData usedSkill)
+        internal static void ContinueAiTurnWithPlan(BattleController controller, HeroData heroData, AIBattlePlan plan, bool forceAttackState)
         {
-            AIBattlePlan nextSupportedSkillPlan = BuildNextSupportedSkillPlan(controller, nowActiveUnit, heroData, usedSkill);
-            AIBattlePlan defaultAiPlan = nextSupportedSkillPlan == null ? controller.GetValueableAIBattlePlan(AIBattlePlanType.Rest) : null;
-            AIBattlePlan currentGridAttackPlan = nextSupportedSkillPlan == null && defaultAiPlan == null ? BuildCurrentGridAttackPlan(controller, nowActiveUnit) : null;
-            AIBattlePlan plan = nextSupportedSkillPlan ?? defaultAiPlan ?? currentGridAttackPlan;
-            if (plan == null)
+            if (controller == null || heroData == null || plan == null)
             {
-                // Main.Log.Msg($"AI 技能后未生成后续计划，保留原版结束回合: type={(FightSkillType)usedSkill.Type()}");
                 return;
             }
 
@@ -254,7 +271,7 @@ namespace BattleSkillRuleTweaks
                 // Main.Log.Msg($"AI 后续计划无攻击技能: plan={plan.battlePlanType}, moveTarget={DescribeGrid(plan.moveTarget)}");
             }
 
-            if (nextSupportedSkillPlan != null || currentGridAttackPlan != null)
+            if (forceAttackState)
             {
                 controller.nowActiveState = ActiveUnitBattleState.ShowAttackingRage;
             }
@@ -284,10 +301,25 @@ namespace BattleSkillRuleTweaks
             }
 
             controller.AIWaitTime = 1f / controller.GetHalfBattleTimeScale();
-            // Main.Log.Msg($"AI 技能后续行动: type={(FightSkillType)usedSkill.Type()}, plan={plan.battlePlanType}, move={(controller.nowActiveState == ActiveUnitBattleState.ShowMovingRage)}, state={controller.nowActiveState}, best={plan.bestPlanValue}");
+            // Main.Log.Msg($"AI 技能后续行动: plan={plan.battlePlanType}, move={(controller.nowActiveState == ActiveUnitBattleState.ShowMovingRage)}, state={controller.nowActiveState}, best={plan.bestPlanValue}");
         }
 
-        private static AIBattlePlan BuildCurrentGridAttackPlan(BattleController controller, BattleUnit nowActiveUnit)
+        private static void TryContinueAiTurn(BattleController controller, BattleUnit nowActiveUnit, HeroData heroData, KungfuSkillLvData usedSkill)
+        {
+            AIBattlePlan nextSupportedSkillPlan = BuildNextSupportedSkillPlan(controller, nowActiveUnit, heroData, usedSkill);
+            AIBattlePlan defaultAiPlan = nextSupportedSkillPlan == null ? controller.GetValueableAIBattlePlan(AIBattlePlanType.Rest) : null;
+            AIBattlePlan currentGridAttackPlan = nextSupportedSkillPlan == null && defaultAiPlan == null ? BuildCurrentGridAttackPlan(controller, nowActiveUnit) : null;
+            AIBattlePlan plan = nextSupportedSkillPlan ?? defaultAiPlan ?? currentGridAttackPlan;
+            if (plan == null)
+            {
+                // Main.Log.Msg($"AI 技能后未生成后续计划，保留原版结束回合: type={(FightSkillType)usedSkill.Type()}");
+                return;
+            }
+
+            ContinueAiTurnWithPlan(controller, heroData, plan, nextSupportedSkillPlan != null || currentGridAttackPlan != null);
+        }
+
+        internal static AIBattlePlan BuildCurrentGridAttackPlan(BattleController controller, BattleUnit nowActiveUnit)
         {
             if (controller == null || nowActiveUnit?.mapGrid == null)
             {
@@ -306,12 +338,31 @@ namespace BattleSkillRuleTweaks
             }
 
             AIBattleAttackPlan attackPlan = plan.battleAttackPlan[0];
-            if (attackPlan == null || attackPlan.activeSkill < 3)
+            if (attackPlan == null || attackPlan.activeSkill < 3 || !HasBattleUnitTarget(attackPlan))
             {
                 return null;
             }
 
             return plan;
+        }
+
+        private static bool HasBattleUnitTarget(AIBattleAttackPlan attackPlan)
+        {
+            if (attackPlan?.attackTargetGridUnits == null || attackPlan.attackTargetGridUnits.Count <= 0)
+            {
+                return false;
+            }
+
+            for (int i = 0; i < attackPlan.attackTargetGridUnits.Count; i++)
+            {
+                GridUnitData targetGrid = attackPlan.attackTargetGridUnits[i];
+                if (targetGrid?.battleUnit != null)
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         private static AIBattlePlan BuildNextSupportedSkillPlan(BattleController controller, BattleUnit nowActiveUnit, HeroData heroData, KungfuSkillLvData usedSkill)
@@ -356,7 +407,7 @@ namespace BattleSkillRuleTweaks
             return plan;
         }
 
-        private static AIBattlePlan BuildDodgeSkillPlan(BattleController controller, BattleUnit nowActiveUnit, KungfuSkillLvData dodgeSkill)
+        internal static AIBattlePlan BuildDodgeSkillPlan(BattleController controller, BattleUnit nowActiveUnit, KungfuSkillLvData dodgeSkill)
         {
             if (controller == null || nowActiveUnit?.mapGrid == null || dodgeSkill == null)
             {
@@ -415,6 +466,8 @@ namespace BattleSkillRuleTweaks
                 GridUnitData targetGrid = attackPlan.attackTargetGridUnits[i];
                 if (targetGrid != null &&
                     targetGrid.battleUnit == null &&
+                    targetGrid.obstale == null &&
+                    targetGrid.GridType != GridType.Obstacle &&
                     targetGrid.isEmpty() &&
                     IsInDodgeRange(currentGrid, dodgeSkill, targetGrid))
                 {
@@ -477,6 +530,54 @@ namespace BattleSkillRuleTweaks
                    skill != usedSkill &&
                    BattleSkillUnlockHelper.IsSupportedSkill(skill) &&
                    heroData.CanUseSkill(skill);
+        }
+    }
+
+    internal static class BattleController_PlayBattleUnitMove_MoveNext_Patch
+    {
+        public static void Postfix(object __instance, bool __result)
+        {
+            if (!__result || __instance == null)
+            {
+                return;
+            }
+
+            BattleController controller = Main.GetBattleUnitAttackEndController(__instance);
+            if (controller == null || controller.nowActiveState != ActiveUnitBattleState.WaitAIPlan)
+            {
+                return;
+            }
+
+            BattleUnit nowActiveUnit = controller.nowActiveUnit;
+            if (nowActiveUnit == null || nowActiveUnit.playerControl)
+            {
+                return;
+            }
+
+            HeroData heroData = nowActiveUnit.heroData;
+            if (!CanUseDodgeAfterMove(heroData))
+            {
+                return;
+            }
+
+            if (BattleController_BattleUnitAttackEnd_MoveNext_Patch.BuildCurrentGridAttackPlan(controller, nowActiveUnit) != null)
+            {
+                return;
+            }
+
+            AIBattlePlan dodgePlan = BattleController_BattleUnitAttackEnd_MoveNext_Patch.BuildDodgeSkillPlan(controller, nowActiveUnit, heroData.dodgeSkill);
+            if (dodgePlan == null)
+            {
+                return;
+            }
+
+            BattleController_BattleUnitAttackEnd_MoveNext_Patch.ContinueAiTurnWithPlan(controller, heroData, dodgePlan, true);
+        }
+
+        private static bool CanUseDodgeAfterMove(HeroData heroData)
+        {
+            KungfuSkillLvData dodgeSkill = heroData?.dodgeSkill;
+            return BattleSkillUnlockHelper.IsSupportedSkill(dodgeSkill) && heroData.CanUseSkill(dodgeSkill);
         }
     }
 }
