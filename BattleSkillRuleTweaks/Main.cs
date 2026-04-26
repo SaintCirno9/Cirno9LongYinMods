@@ -225,7 +225,8 @@ namespace BattleSkillRuleTweaks
         private static void TryContinueAiTurn(BattleController controller, BattleUnit nowActiveUnit, HeroData heroData, KungfuSkillLvData usedSkill)
         {
             AIBattlePlan nextSupportedSkillPlan = BuildNextSupportedSkillPlan(nowActiveUnit, heroData, usedSkill);
-            AIBattlePlan plan = nextSupportedSkillPlan ?? controller.GetValueableAIBattlePlan(AIBattlePlanType.Rest);
+            AIBattlePlan currentGridAttackPlan = nextSupportedSkillPlan == null ? BuildCurrentGridAttackPlan(controller, nowActiveUnit) : null;
+            AIBattlePlan plan = nextSupportedSkillPlan ?? currentGridAttackPlan ?? controller.GetValueableAIBattlePlan(AIBattlePlanType.Rest);
             if (plan == null)
             {
                 // Main.Log.Msg($"AI 技能后未生成后续计划，保留原版结束回合: type={(FightSkillType)usedSkill.Type()}");
@@ -250,7 +251,7 @@ namespace BattleSkillRuleTweaks
                 heroData.SetNowActiveSkill(null);
             }
 
-            if (nextSupportedSkillPlan != null)
+            if (nextSupportedSkillPlan != null || currentGridAttackPlan != null)
             {
                 controller.nowActiveState = ActiveUnitBattleState.ShowAttackingRage;
             }
@@ -281,6 +282,33 @@ namespace BattleSkillRuleTweaks
 
             controller.AIWaitTime = 1f / controller.GetHalfBattleTimeScale();
             Main.Log.Msg($"AI 技能后续行动: type={(FightSkillType)usedSkill.Type()}, plan={plan.battlePlanType}, move={(controller.nowActiveState == ActiveUnitBattleState.ShowMovingRage)}, state={controller.nowActiveState}, best={plan.bestPlanValue}");
+        }
+
+        private static AIBattlePlan BuildCurrentGridAttackPlan(BattleController controller, BattleUnit nowActiveUnit)
+        {
+            if (controller == null || nowActiveUnit?.mapGrid == null)
+            {
+                return null;
+            }
+
+            AIBattlePlan plan = new AIBattlePlan(AIBattlePlanType.UseSkill)
+            {
+                moveTarget = nowActiveUnit.mapGrid
+            };
+            controller.GenerateAIPlanUseSkill(plan);
+
+            if (plan.battleAttackPlan == null || plan.battleAttackPlan.Count <= 0)
+            {
+                return null;
+            }
+
+            AIBattleAttackPlan attackPlan = plan.battleAttackPlan[0];
+            if (attackPlan == null || attackPlan.activeSkill < 3)
+            {
+                return null;
+            }
+
+            return plan;
         }
 
         private static AIBattlePlan BuildNextSupportedSkillPlan(BattleUnit nowActiveUnit, HeroData heroData, KungfuSkillLvData usedSkill)
