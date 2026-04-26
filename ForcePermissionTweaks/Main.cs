@@ -6,7 +6,7 @@ using MelonLoader;
 using UnityEngine;
 using UnityEngine.UI;
 
-[assembly: MelonInfo(typeof(ForcePermissionTweaks.Main), "ForcePermissionTweaks", "1.1.1", "SaintCirno9", null)]
+[assembly: MelonInfo(typeof(ForcePermissionTweaks.Main), "ForcePermissionTweaks", "1.2.0", "SaintCirno9", null)]
 [assembly: MelonGame("TppStudio", "LongYinLiZhiZhuan")]
 
 namespace ForcePermissionTweaks
@@ -62,6 +62,11 @@ namespace ForcePermissionTweaks
         private const string ManageBookStoreCallFunction = "ManageBookStore";
 
         private static ForcePermissionConfig _config = ForcePermissionConfig.CreateDefault();
+        private static bool _buildRoleRequirementOriginalCaptured;
+        private static int _originalUpgradeBuildNeedForceLv;
+        private static int _originalNewBuildNeedForceLv;
+        private static int _originalDestroyBuildNeedForceLv;
+        private static int _originalMoveBuildNeedForceLv;
         private static bool _missingButtonWarningShown;
         private static bool _patchErrorShown;
 
@@ -72,6 +77,31 @@ namespace ForcePermissionTweaks
             _config = config ?? ForcePermissionConfig.CreateDefault();
             _missingButtonWarningShown = false;
             _patchErrorShown = false;
+        }
+
+        internal static void ApplyBuildModeRoleRequirementOverride()
+        {
+            CaptureBuildModeRoleRequirementOriginals();
+
+            if (!_buildRoleRequirementOriginalCaptured)
+            {
+                return;
+            }
+
+            if (!_config.EnableBuildButtonOverride || _config.BuildButtonMinimumRole == ForceRoleRequirement.Original)
+            {
+                RestoreBuildModeRoleRequirementOriginals();
+                return;
+            }
+
+            int requirement = (int)_config.BuildButtonMinimumRole;
+            AreaBuildController.UpgradeBuildNeedForceLv = requirement;
+            AreaBuildController.NewBuildNeedForceLv = requirement;
+            AreaBuildController.DestroyBuildNeedForceLv = requirement;
+            AreaBuildController.MoveBuildNeedForceLv = requirement;
+
+            Main.LogVerbose(
+                $"建筑建造权限门槛已覆盖：upgrade={AreaBuildController.UpgradeBuildNeedForceLv}，new={AreaBuildController.NewBuildNeedForceLv}，destroy={AreaBuildController.DestroyBuildNeedForceLv}，move={AreaBuildController.MoveBuildNeedForceLv}。");
         }
 
         internal static void ApplyCenterBuildingUpgradeLimitOverride(AreaBuildingData targetBuilding, out CenterBuildingUpgradeLimitOverrideState state)
@@ -264,6 +294,28 @@ namespace ForcePermissionTweaks
             }
 
             return player.heroForceLv >= (int)requirement;
+        }
+
+        private static void CaptureBuildModeRoleRequirementOriginals()
+        {
+            if (_buildRoleRequirementOriginalCaptured)
+            {
+                return;
+            }
+
+            _originalUpgradeBuildNeedForceLv = AreaBuildController.UpgradeBuildNeedForceLv;
+            _originalNewBuildNeedForceLv = AreaBuildController.NewBuildNeedForceLv;
+            _originalDestroyBuildNeedForceLv = AreaBuildController.DestroyBuildNeedForceLv;
+            _originalMoveBuildNeedForceLv = AreaBuildController.MoveBuildNeedForceLv;
+            _buildRoleRequirementOriginalCaptured = true;
+        }
+
+        private static void RestoreBuildModeRoleRequirementOriginals()
+        {
+            AreaBuildController.UpgradeBuildNeedForceLv = _originalUpgradeBuildNeedForceLv;
+            AreaBuildController.NewBuildNeedForceLv = _originalNewBuildNeedForceLv;
+            AreaBuildController.DestroyBuildNeedForceLv = _originalDestroyBuildNeedForceLv;
+            AreaBuildController.MoveBuildNeedForceLv = _originalMoveBuildNeedForceLv;
         }
 
         private static bool TryGetCenterBuildingHeroLimitEntry(
@@ -534,6 +586,7 @@ namespace ForcePermissionTweaks
     {
         private static void Postfix(AreaBuildController __instance)
         {
+            ForcePermissionRuntime.ApplyBuildModeRoleRequirementOverride();
             ForcePermissionRuntime.ApplyBuildButtonOverride(__instance);
         }
     }
