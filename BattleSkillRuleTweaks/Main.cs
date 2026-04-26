@@ -6,7 +6,7 @@ using System;
 using System.Reflection;
 using System.Runtime.InteropServices;
 
-[assembly: MelonInfo(typeof(BattleSkillRuleTweaks.Main), "BattleSkillRuleTweaks", "1.1.0", "SaintCirno9", null)]
+[assembly: MelonInfo(typeof(BattleSkillRuleTweaks.Main), "BattleSkillRuleTweaks", "1.2.0", "SaintCirno9", null)]
 [assembly: MelonGame("TppStudio", "LongYinLiZhiZhuan")]
 
 namespace BattleSkillRuleTweaks
@@ -17,6 +17,7 @@ namespace BattleSkillRuleTweaks
 
         private const int BattleUnitAttackEndThisOffset = 0x20;
         private const int BattleControllerNowActiveUnitAttackedOffset = 0x119;
+        internal static readonly MethodInfo GetAttackRangeGridsMethod = AccessTools.Method(typeof(BattleController), "GetAttackRangeGrids");
 
         public override void OnInitializeMelon()
         {
@@ -306,17 +307,18 @@ namespace BattleSkillRuleTweaks
 
         private static void TryContinueAiTurn(BattleController controller, BattleUnit nowActiveUnit, HeroData heroData, KungfuSkillLvData usedSkill)
         {
-            AIBattlePlan nextSupportedSkillPlan = BuildNextSupportedSkillPlan(controller, nowActiveUnit, heroData, usedSkill);
+            AIBattlePlan currentGridAttackPlan = BuildCurrentGridAttackPlan(controller, nowActiveUnit);
+            AIBattlePlan nextSupportedSkillPlan = BuildNextSupportedSkillPlan(controller, nowActiveUnit, heroData, usedSkill, currentGridAttackPlan != null);
             AIBattlePlan defaultAiPlan = nextSupportedSkillPlan == null ? controller.GetValueableAIBattlePlan(AIBattlePlanType.Rest) : null;
-            AIBattlePlan currentGridAttackPlan = nextSupportedSkillPlan == null && defaultAiPlan == null ? BuildCurrentGridAttackPlan(controller, nowActiveUnit) : null;
-            AIBattlePlan plan = nextSupportedSkillPlan ?? defaultAiPlan ?? currentGridAttackPlan;
+            AIBattlePlan fallbackAttackPlan = nextSupportedSkillPlan == null && defaultAiPlan == null ? currentGridAttackPlan : null;
+            AIBattlePlan plan = nextSupportedSkillPlan ?? defaultAiPlan ?? fallbackAttackPlan;
             if (plan == null)
             {
                 // Main.Log.Msg($"AI 技能后未生成后续计划，保留原版结束回合: type={(FightSkillType)usedSkill.Type()}");
                 return;
             }
 
-            ContinueAiTurnWithPlan(controller, heroData, plan, nextSupportedSkillPlan != null || currentGridAttackPlan != null);
+            ContinueAiTurnWithPlan(controller, heroData, plan, nextSupportedSkillPlan != null || fallbackAttackPlan != null);
         }
 
         internal static AIBattlePlan BuildCurrentGridAttackPlan(BattleController controller, BattleUnit nowActiveUnit)
@@ -330,7 +332,7 @@ namespace BattleSkillRuleTweaks
             {
                 moveTarget = nowActiveUnit.mapGrid
             };
-            controller.GenerateAIPlanUseSkill(plan);
+            GenerateAttackOnlyPlan(controller, nowActiveUnit.heroData, plan);
 
             if (plan.battleAttackPlan == null || plan.battleAttackPlan.Count <= 0)
             {
@@ -338,17 +340,113 @@ namespace BattleSkillRuleTweaks
             }
 
             AIBattleAttackPlan attackPlan = plan.battleAttackPlan[0];
-            if (attackPlan == null || attackPlan.activeSkill < 3 || !HasBattleUnitTarget(attackPlan))
+            if (attackPlan == null || attackPlan.activeSkill < 3 || !HasAvailableEnemyTarget(controller, attackPlan))
+            {
+                // Main.Log.Msg($"AI 跳后攻击计划排除: moveTarget={DescribeGrid(nowActiveUnit.mapGrid)}, raw={DescribePlanTargets(controller, plan)}");
+                return null;
+            }
+
+            // Main.Log.Msg($"AI 跳后攻击计划接受: moveTarget={DescribeGrid(nowActiveUnit.mapGrid)}, raw={DescribePlanTargets(controller, plan)}");
+            return plan;
+        }
+
+        private static AIBattlePlan BuildAttackPlanFromGrid(BattleController controller, GridUnitData moveTarget)
+        {
+            if (controller == null || moveTarget == null)
             {
                 return null;
             }
 
+            AIBattlePlan plan = new AIBattlePlan(AIBattlePlanType.UseSkill)
+            {
+                moveTarget = moveTarget
+            };
+            GenerateAttackOnlyPlan(controller, controller.nowActiveUnit?.heroData, plan);
+
+            if (plan.battleAttackPlan == null || plan.battleAttackPlan.Count <= 0)
+            {
+                // Main.Log.Msg($"AI 跳后攻击计划排除: moveTarget={DescribeGrid(moveTarget)}, raw=无攻击计划");
+                return null;
+            }
+
+            AIBattleAttackPlan attackPlan = plan.battleAttackPlan[0];
+            if (attackPlan == null || attackPlan.activeSkill < 3 || !HasAvailableEnemyTarget(controller, attackPlan))
+            {
+                // Main.Log.Msg($"AI 跳后攻击计划排除: moveTarget={DescribeGrid(moveTarget)}, raw={DescribePlanTargets(controller, plan)}");
+                return null;
+            }
+
+            // Main.Log.Msg($"AI 跳后攻击计划接受: moveTarget={DescribeGrid(moveTarget)}, raw={DescribePlanTargets(controller, plan)}");
             return plan;
         }
 
-        private static bool HasBattleUnitTarget(AIBattleAttackPlan attackPlan)
+        private static void GenerateAttackOnlyPlan(BattleController controller, HeroData heroData, AIBattlePlan plan)
         {
-            if (attackPlan?.attackTargetGridUnits == null || attackPlan.attackTargetGridUnits.Count <= 0)
+            if (controller == null || heroData == null || plan == null)
+            {
+                return;
+            }
+
+            SkillUseState internalState = new SkillUseState(heroData.internalSkill);
+            SkillUseState dodgeState = new SkillUseState(heroData.dodgeSkill);
+            SkillUseState uniqueState = new SkillUseState(heroData.uniqueSkill);
+
+            try
+            {
+                BlockSkillForPlan(heroData.internalSkill);
+                BlockSkillForPlan(heroData.dodgeSkill);
+                BlockSkillForPlan(heroData.uniqueSkill);
+                controller.GenerateAIPlanUseSkill(plan);
+            }
+            finally
+            {
+                internalState.Restore();
+                dodgeState.Restore();
+                uniqueState.Restore();
+            }
+        }
+
+        private static void BlockSkillForPlan(KungfuSkillLvData skill)
+        {
+            if (BattleSkillUnlockHelper.IsSupportedSkill(skill))
+            {
+                skill.useTime = 1;
+                skill.cdTimeLeft = 999999f;
+                skill.activeTimeLeft = 999999f;
+            }
+        }
+
+        private readonly struct SkillUseState
+        {
+            private readonly KungfuSkillLvData skill;
+            private readonly int useTime;
+            private readonly float cdTimeLeft;
+            private readonly float activeTimeLeft;
+
+            internal SkillUseState(KungfuSkillLvData skill)
+            {
+                this.skill = skill;
+                useTime = skill == null ? 0 : skill.useTime;
+                cdTimeLeft = skill == null ? 0f : skill.cdTimeLeft;
+                activeTimeLeft = skill == null ? 0f : skill.activeTimeLeft;
+            }
+
+            internal void Restore()
+            {
+                if (skill == null)
+                {
+                    return;
+                }
+
+                skill.useTime = useTime;
+                skill.cdTimeLeft = cdTimeLeft;
+                skill.activeTimeLeft = activeTimeLeft;
+            }
+        }
+
+        private static bool HasAvailableEnemyTarget(BattleController controller, AIBattleAttackPlan attackPlan)
+        {
+            if (controller == null || attackPlan?.attackTargetGridUnits == null || attackPlan.attackTargetGridUnits.Count <= 0)
             {
                 return false;
             }
@@ -356,7 +454,7 @@ namespace BattleSkillRuleTweaks
             for (int i = 0; i < attackPlan.attackTargetGridUnits.Count; i++)
             {
                 GridUnitData targetGrid = attackPlan.attackTargetGridUnits[i];
-                if (targetGrid?.battleUnit != null)
+                if (controller.HaveAvailableEnemyUnit(targetGrid))
                 {
                     return true;
                 }
@@ -365,7 +463,7 @@ namespace BattleSkillRuleTweaks
             return false;
         }
 
-        private static AIBattlePlan BuildNextSupportedSkillPlan(BattleController controller, BattleUnit nowActiveUnit, HeroData heroData, KungfuSkillLvData usedSkill)
+        internal static AIBattlePlan BuildNextSupportedSkillPlan(BattleController controller, BattleUnit nowActiveUnit, HeroData heroData, KungfuSkillLvData usedSkill, bool useDodgeInPlace)
         {
             if (nowActiveUnit?.mapGrid == null || !TryGetNextSupportedSkill(heroData, usedSkill, out int activeSkill))
             {
@@ -374,6 +472,11 @@ namespace BattleSkillRuleTweaks
 
             if (activeSkill == 1)
             {
+                if (useDodgeInPlace)
+                {
+                    return BuildDirectSkillPlan(activeSkill, nowActiveUnit.mapGrid, nowActiveUnit.mapGrid, 999999f);
+                }
+
                 // Main.Log.Msg($"AI 准备续用轻功: current={DescribeGrid(nowActiveUnit.mapGrid)}");
                 AIBattlePlan dodgePlan = BuildDodgeSkillPlan(controller, nowActiveUnit, heroData.dodgeSkill);
                 if (dodgePlan != null)
@@ -383,6 +486,7 @@ namespace BattleSkillRuleTweaks
                 }
 
                 // Main.Log.Warning($"AI 轻功计划生成失败，回退到当前格释放: current={DescribeGrid(nowActiveUnit.mapGrid)}");
+                return null;
             }
 
             return BuildDirectSkillPlan(activeSkill, nowActiveUnit.mapGrid, nowActiveUnit.mapGrid, 999999f);
@@ -414,68 +518,106 @@ namespace BattleSkillRuleTweaks
                 return null;
             }
 
-            AIBattlePlan plan = new AIBattlePlan(AIBattlePlanType.UseSkill)
+            Il2CppSystem.Collections.Generic.List<GridUnitData> targetGrids = BuildDodgeTargetGrids(controller, nowActiveUnit, dodgeSkill);
+            if (targetGrids == null || targetGrids.Count <= 0)
             {
-                bestPlanValue = 999999f,
-                moveTarget = nowActiveUnit.mapGrid
-            };
-            controller.GenerateAIPlanUseSkill(plan);
-            // Main.Log.Msg($"AI 原版轻功候选: current={DescribeGrid(nowActiveUnit.mapGrid)}, moveTarget={DescribeGrid(plan.moveTarget)}, planCount={(plan.battleAttackPlan == null ? -1 : plan.battleAttackPlan.Count)}");
-
-            if (plan.battleAttackPlan == null)
-            {
+                // Main.Log.Msg($"AI 轻功候选为空: current={DescribeGrid(nowActiveUnit.mapGrid)}");
                 return null;
             }
 
-            for (int i = 0; i < plan.battleAttackPlan.Count; i++)
+            GridUnitData bestAttackTarget = null;
+            float bestAttackValue = float.MinValue;
+            int bestAttackDistance = -1;
+
+            // Main.Log.Msg($"AI 轻功候选开始: current={DescribeGrid(nowActiveUnit.mapGrid)}, targetCount={targetGrids.Count}, originalBest={DescribeGrid(controller.GetBestValueGrid(targetGrids))}");
+            for (int i = 0; i < targetGrids.Count; i++)
             {
-                AIBattleAttackPlan attackPlan = plan.battleAttackPlan[i];
-                GridUnitData targetGrid = GetFirstEmptyTargetGridInDodgeRange(nowActiveUnit.mapGrid, dodgeSkill, attackPlan);
-                // Main.Log.Msg($"AI 原版轻功候选明细: index={i}, activeSkill={(attackPlan == null ? -1 : attackPlan.activeSkill)}, targetCount={GetTargetGridCount(attackPlan)}, firstTarget={DescribeFirstTargetGrid(attackPlan)}, emptyTarget={DescribeGrid(targetGrid)}");
-                if (targetGrid == null)
+                GridUnitData targetGrid = targetGrids[i];
+                if (!IsValidDodgeTargetGrid(nowActiveUnit.mapGrid, dodgeSkill, targetGrid))
                 {
+                    // Main.Log.Msg($"AI 轻功目标排除: index={i}, target={DescribeGrid(targetGrid)}, reason={invalidReason}");
                     continue;
                 }
 
-                if (attackPlan.activeSkill == 1)
+                int distance = nowActiveUnit.mapGrid.Distance(targetGrid);
+                // Main.Log.Msg($"AI 轻功目标合法: index={i}, target={DescribeGrid(targetGrid)}, distance={distance}");
+
+                AIBattlePlan followUpPlan = BuildAttackPlanFromGrid(controller, targetGrid);
+                if (followUpPlan == null)
                 {
-                    plan.battleAttackPlan.Clear();
-                    attackPlan.attackTargetGridUnits.Clear();
-                    attackPlan.attackTargetGridUnits.Add(targetGrid);
-                    plan.battleAttackPlan.Add(attackPlan);
-                    plan.bestPlanValue = attackPlan.planValue;
-                    return plan;
+                    // Main.Log.Msg($"AI 轻功跳后攻击评估: target={DescribeGrid(targetGrid)}, result=无可攻击敌方计划");
+                    continue;
                 }
 
-                // Main.Log.Msg($"AI 轻功复用原版目标格: oldActiveSkill={attackPlan.activeSkill}, target={DescribeGrid(targetGrid)}");
-                return BuildDirectSkillPlan(1, nowActiveUnit.mapGrid, targetGrid, attackPlan.planValue);
+                // Main.Log.Msg($"AI 轻功跳后攻击评估: target={DescribeGrid(targetGrid)}, result=可攻击敌方, followUp={DescribePlanTargets(controller, followUpPlan)}");
+                if (bestAttackTarget == null || followUpPlan.bestPlanValue > bestAttackValue || followUpPlan.bestPlanValue == bestAttackValue && distance > bestAttackDistance)
+                {
+                    bestAttackTarget = targetGrid;
+                    bestAttackValue = followUpPlan.bestPlanValue;
+                    bestAttackDistance = distance;
+                    // Main.Log.Msg($"AI 轻功能接攻击候选更新: index={i}, target={DescribeGrid(targetGrid)}, followUpValue={followUpPlan.bestPlanValue}, distance={distance}");
+                }
             }
 
-            return null;
+            bool useAttackTarget = bestAttackTarget != null;
+            if (!useAttackTarget)
+            {
+                // Main.Log.Msg($"AI 轻功取消: reason=无跳后攻击点, current={DescribeGrid(nowActiveUnit.mapGrid)}");
+                return null;
+            }
+
+            // Main.Log.Msg($"AI 轻功最终选点: reason=跳后可攻击敌方, target={DescribeGrid(bestAttackTarget)}, value={bestAttackValue}, distance={bestAttackDistance}");
+            return BuildDirectSkillPlan(1, nowActiveUnit.mapGrid, bestAttackTarget, bestAttackValue);
         }
 
-        private static GridUnitData GetFirstEmptyTargetGridInDodgeRange(GridUnitData currentGrid, KungfuSkillLvData dodgeSkill, AIBattleAttackPlan attackPlan)
+        private static Il2CppSystem.Collections.Generic.List<GridUnitData> BuildDodgeTargetGrids(BattleController controller, BattleUnit nowActiveUnit, KungfuSkillLvData dodgeSkill)
         {
-            if (attackPlan?.attackTargetGridUnits == null || attackPlan.attackTargetGridUnits.Count <= 0)
+            if (controller?.attackRangeGridUnits == null || Main.GetAttackRangeGridsMethod == null)
             {
                 return null;
             }
 
-            for (int i = 0; i < attackPlan.attackTargetGridUnits.Count; i++)
+            controller.attackRangeGridUnits.Clear();
+            Main.GetAttackRangeGridsMethod.Invoke(controller, new object[] { nowActiveUnit.heroData, dodgeSkill.DataBase(), nowActiveUnit.mapGrid, controller.attackRangeGridUnits });
+            Il2CppSystem.Collections.Generic.List<GridUnitData> targetGrids = controller.RemoveAllUnemptyGrid(controller.attackRangeGridUnits);
+            targetGrids.Add(nowActiveUnit.mapGrid);
+
+            return targetGrids;
+        }
+
+        private static bool IsValidDodgeTargetGrid(GridUnitData currentGrid, KungfuSkillLvData dodgeSkill, GridUnitData targetGrid)
+        {
+            if (targetGrid == null)
             {
-                GridUnitData targetGrid = attackPlan.attackTargetGridUnits[i];
-                if (targetGrid != null &&
-                    targetGrid.battleUnit == null &&
-                    targetGrid.obstale == null &&
-                    targetGrid.GridType != GridType.Obstacle &&
-                    targetGrid.isEmpty() &&
-                    IsInDodgeRange(currentGrid, dodgeSkill, targetGrid))
-                {
-                    return targetGrid;
-                }
+                return false;
             }
 
-            return null;
+            if (targetGrid.battleUnit != null)
+            {
+                return false;
+            }
+
+            if (targetGrid.obstale != null)
+            {
+                return false;
+            }
+
+            if (targetGrid.GridType == GridType.Obstacle)
+            {
+                return false;
+            }
+
+            if (!targetGrid.isEmpty())
+            {
+                return false;
+            }
+
+            if (!IsInDodgeRange(currentGrid, dodgeSkill, targetGrid))
+            {
+                return false;
+            }
+
+            return true;
         }
 
         private static bool IsInDodgeRange(GridUnitData currentGrid, KungfuSkillLvData dodgeSkill, GridUnitData targetGrid)
@@ -555,12 +697,18 @@ namespace BattleSkillRuleTweaks
             }
 
             HeroData heroData = nowActiveUnit.heroData;
-            if (!CanUseDodgeAfterMove(heroData))
+            if (BattleController_BattleUnitAttackEnd_MoveNext_Patch.BuildCurrentGridAttackPlan(controller, nowActiveUnit) != null)
             {
+                AIBattlePlan buffPlan = BattleController_BattleUnitAttackEnd_MoveNext_Patch.BuildNextSupportedSkillPlan(controller, nowActiveUnit, heroData, null, true);
+                if (buffPlan != null)
+                {
+                    BattleController_BattleUnitAttackEnd_MoveNext_Patch.ContinueAiTurnWithPlan(controller, heroData, buffPlan, true);
+                }
+
                 return;
             }
 
-            if (BattleController_BattleUnitAttackEnd_MoveNext_Patch.BuildCurrentGridAttackPlan(controller, nowActiveUnit) != null)
+            if (!CanUseDodgeAfterMove(heroData))
             {
                 return;
             }
