@@ -11,7 +11,7 @@ using Il2CppInterop.Runtime;
 using Il2CppSystem.Collections.Generic;
 using UnityEngine;
 
-[assembly: MelonInfo(typeof(LongYinCustomKungfuSkill.Main), "LongYinCustomKungfuSkill", "2.3.1", "SaintCirno9", null)]
+[assembly: MelonInfo(typeof(LongYinCustomKungfuSkill.Main), "LongYinCustomKungfuSkill", "2.4.0", "SaintCirno9", null)]
 [assembly: MelonGame("TppStudio", "LongYinLiZhiZhuan")]
 
 namespace LongYinCustomKungfuSkill
@@ -318,6 +318,76 @@ namespace LongYinCustomKungfuSkill
         internal static bool IsInjectedCustomSkillId(int skillId)
         {
             return skillId >= 0 && (InjectedCustomSkillIds.Contains(skillId) || skillId > VanillaKungFuMaxId);
+        }
+
+        internal static void AddCustomSkillsToJianghuBookPool(GameDataController gameData)
+        {
+            if (gameData?.kungfuSkillDataList == null || InjectedCustomSkillIds.Count == 0)
+            {
+                return;
+            }
+
+            int addedCount = 0;
+            foreach (int skillId in InjectedCustomSkillIds.OrderBy(id => id))
+            {
+                KungfuSkillData skillData = gameData.GetSkillDataBase(skillId);
+                if (skillData == null || skillData.hide || skillData.belongForceID == -1 || IsBigForceId(gameData, skillData.belongForceID))
+                {
+                    continue;
+                }
+
+                int rareLv = Math.Clamp(skillData.rareLv, 0, 5);
+                List<KungfuSkillData> jianghuPool = gameData.kungfuSkillDataList[0][rareLv];
+                if (jianghuPool == null || ContainsSkillId(jianghuPool, skillData.skillID))
+                {
+                    continue;
+                }
+
+                jianghuPool.Add(skillData);
+                addedCount++;
+            }
+
+            if (addedCount > 0)
+            {
+                LOG.Msg($"已将 {addedCount} 门非大门派自定义功法加入江湖秘籍随机池。");
+            }
+        }
+
+        private static bool IsBigForceId(GameDataController gameData, int forceId)
+        {
+            if (gameData?.bigForceIDList == null)
+            {
+                return false;
+            }
+
+            for (int i = 0; i < gameData.bigForceIDList.Count; i++)
+            {
+                if (gameData.bigForceIDList[i] == forceId)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static bool ContainsSkillId(List<KungfuSkillData> skills, int skillId)
+        {
+            if (skills == null)
+            {
+                return false;
+            }
+
+            for (int i = 0; i < skills.Count; i++)
+            {
+                KungfuSkillData skill = skills[i];
+                if (skill != null && skill.skillID == skillId)
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         internal static bool TryGetFallbackIconIdForSkill(KungfuSkillData skillData, out int fallbackSkillId)
@@ -1409,6 +1479,16 @@ namespace LongYinCustomKungfuSkill
             {
                 Main.LOG.Msg(ConsoleColor.DarkYellow, $"  - {change}");
             }
+        }
+    }
+
+    [HarmonyPatch(typeof(GameDataController), nameof(GameDataController.LoadAllGameData))]
+    public static class GameDataControllerLoadAllGameDataPatch
+    {
+        [HarmonyPostfix]
+        public static void Postfix(GameDataController __instance)
+        {
+            Main.AddCustomSkillsToJianghuBookPool(__instance);
         }
     }
 
