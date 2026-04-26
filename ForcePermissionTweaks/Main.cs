@@ -6,7 +6,7 @@ using MelonLoader;
 using UnityEngine;
 using UnityEngine.UI;
 
-[assembly: MelonInfo(typeof(ForcePermissionTweaks.Main), "ForcePermissionTweaks", "1.2.0", "SaintCirno9", null)]
+[assembly: MelonInfo(typeof(ForcePermissionTweaks.Main), "ForcePermissionTweaks", "1.2.1", "SaintCirno9", null)]
 [assembly: MelonGame("TppStudio", "LongYinLiZhiZhuan")]
 
 namespace ForcePermissionTweaks
@@ -67,6 +67,7 @@ namespace ForcePermissionTweaks
         private static int _originalNewBuildNeedForceLv;
         private static int _originalDestroyBuildNeedForceLv;
         private static int _originalMoveBuildNeedForceLv;
+        private static int _originalUpgradeRoadNeedForceLv;
         private static bool _missingButtonWarningShown;
         private static bool _patchErrorShown;
 
@@ -99,9 +100,10 @@ namespace ForcePermissionTweaks
             AreaBuildController.NewBuildNeedForceLv = requirement;
             AreaBuildController.DestroyBuildNeedForceLv = requirement;
             AreaBuildController.MoveBuildNeedForceLv = requirement;
+            AreaBuildController.UpgradeRoadNeedForceLv = requirement;
 
             Main.LogVerbose(
-                $"建筑建造权限门槛已覆盖：upgrade={AreaBuildController.UpgradeBuildNeedForceLv}，new={AreaBuildController.NewBuildNeedForceLv}，destroy={AreaBuildController.DestroyBuildNeedForceLv}，move={AreaBuildController.MoveBuildNeedForceLv}。");
+                $"建筑建造权限门槛已覆盖：upgrade={AreaBuildController.UpgradeBuildNeedForceLv}，new={AreaBuildController.NewBuildNeedForceLv}，destroy={AreaBuildController.DestroyBuildNeedForceLv}，move={AreaBuildController.MoveBuildNeedForceLv}，roadUpgrade={AreaBuildController.UpgradeRoadNeedForceLv}。");
         }
 
         internal static void ApplyCenterBuildingUpgradeLimitOverride(AreaBuildingData targetBuilding, out CenterBuildingUpgradeLimitOverrideState state)
@@ -307,6 +309,7 @@ namespace ForcePermissionTweaks
             _originalNewBuildNeedForceLv = AreaBuildController.NewBuildNeedForceLv;
             _originalDestroyBuildNeedForceLv = AreaBuildController.DestroyBuildNeedForceLv;
             _originalMoveBuildNeedForceLv = AreaBuildController.MoveBuildNeedForceLv;
+            _originalUpgradeRoadNeedForceLv = AreaBuildController.UpgradeRoadNeedForceLv;
             _buildRoleRequirementOriginalCaptured = true;
         }
 
@@ -316,6 +319,7 @@ namespace ForcePermissionTweaks
             AreaBuildController.NewBuildNeedForceLv = _originalNewBuildNeedForceLv;
             AreaBuildController.DestroyBuildNeedForceLv = _originalDestroyBuildNeedForceLv;
             AreaBuildController.MoveBuildNeedForceLv = _originalMoveBuildNeedForceLv;
+            AreaBuildController.UpgradeRoadNeedForceLv = _originalUpgradeRoadNeedForceLv;
         }
 
         private static bool TryGetCenterBuildingHeroLimitEntry(

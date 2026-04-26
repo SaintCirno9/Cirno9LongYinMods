@@ -65,4 +65,4 @@ ForcePermissionTweaks
 
 发布文件：
 1. DLL：`ForcePermissionTweaks.dll`
-2. 压缩包：`ForcePermissionTweaks-v1.2.0.zip`
+2. 压缩包：`ForcePermissionTweaks-v1.2.1.zip`
