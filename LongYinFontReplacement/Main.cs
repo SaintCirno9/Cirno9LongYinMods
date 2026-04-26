@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using HarmonyLib;
+using Il2Cpp;
 using MelonLoader;
 using UnityEngine;
 using UnityEngine.UI;

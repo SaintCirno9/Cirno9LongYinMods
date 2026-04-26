@@ -5,7 +5,7 @@ using HarmonyLib;
 using Il2Cpp;
 using MelonLoader;
 
-[assembly: MelonInfo(typeof(LimitedInvincible.Main), "LimitedInvincible", "1.0.0", "SaintCirno9", null)]
+[assembly: MelonInfo(typeof(LimitedInvincible.Main), "LimitedInvincible", "1.1.0", "SaintCirno9", null)]
 [assembly: MelonGame("TppStudio", "LongYinLiZhiZhuan")]
 
 namespace LimitedInvincible
@@ -22,7 +22,6 @@ namespace LimitedInvincible
         private static readonly Dictionary<int, InvincibleCounterState> InvincibleStates = new();
 
         private static ModConfig Config = ModConfig.CreateDefault();
-        private static int AiPlanningDepth;
 
         internal static MelonLogger.Instance Log => Melon<Main>.Logger;
 
@@ -34,8 +33,14 @@ namespace LimitedInvincible
         public override void OnInitializeMelon()
         {
             LoadConfig();
+            AiIgnoreInvincibleNativePatch.TryInstall(Log);
             Log.Msg(
                 $"LimitedInvincible 已加载。配置文件：{ConfigPath}。次数版无敌={FormatEnabled(EnableLimitedInvincible)}，每层抵挡次数={HitsPerInvincibleCount}，AI 无视无敌={FormatEnabled(EnableAiIgnoreInvincible)}，VerboseLog={FormatEnabled(VerboseLogEnabled)}。");
+        }
+
+        public override void OnDeinitializeMelon()
+        {
+            AiIgnoreInvincibleNativePatch.TryRestore(Log);
         }
 
         internal static void ClearRuntimeState()
@@ -43,7 +48,6 @@ namespace LimitedInvincible
             lock (SyncRoot)
             {
                 InvincibleStates.Clear();
-                AiPlanningDepth = 0;
             }
         }
 
@@ -183,48 +187,6 @@ namespace LimitedInvincible
 
             RemoveInvincibleBuff(hero);
             LogVerbose($"无敌次数耗尽，已清除 buff：{GetHeroDisplayName(hero)}。");
-        }
-
-        internal static void EnterAiPlanningContext()
-        {
-            if (!EnableAiIgnoreInvincible)
-            {
-                return;
-            }
-
-            lock (SyncRoot)
-            {
-                AiPlanningDepth++;
-            }
-        }
-
-        internal static void ExitAiPlanningContext()
-        {
-            if (!EnableAiIgnoreInvincible)
-            {
-                return;
-            }
-
-            lock (SyncRoot)
-            {
-                if (AiPlanningDepth > 0)
-                {
-                    AiPlanningDepth--;
-                }
-            }
-        }
-
-        internal static bool ShouldIgnoreInvincibleForAiPlanning(int speAddDataType)
-        {
-            if (!EnableAiIgnoreInvincible || speAddDataType != InvincibleBuffId)
-            {
-                return false;
-            }
-
-            lock (SyncRoot)
-            {
-                return AiPlanningDepth > 0;
-            }
         }
 
         internal static void RemoveInvincibleBuff(HeroData hero)
@@ -540,38 +502,6 @@ namespace LimitedInvincible
         }
     }
 
-    [HarmonyPatch(typeof(BattleController), nameof(BattleController.GenerateAIPlanUseSkill))]
-    internal static class BattleControllerGenerateAiPlanUseSkillPatch
-    {
-        [HarmonyPrefix]
-        private static void Prefix()
-        {
-            Main.EnterAiPlanningContext();
-        }
-
-        [HarmonyFinalizer]
-        private static Exception Finalizer(Exception __exception)
-        {
-            Main.ExitAiPlanningContext();
-            return __exception;
-        }
-    }
-
-    [HarmonyPatch(typeof(HeroSpeAddData), nameof(HeroSpeAddData.Get), new[] { typeof(int) })]
-    internal static class HeroSpeAddDataGetIntPatch
-    {
-        [HarmonyPostfix]
-        private static void Postfix(int speAddDataType, ref float __result)
-        {
-            if (!Main.ShouldIgnoreInvincibleForAiPlanning(speAddDataType))
-            {
-                return;
-            }
-
-            __result = 0f;
-        }
-    }
-
     [HarmonyPatch(typeof(BattleController), nameof(BattleController.ManageHeroBuffRound))]
     internal static class BattleControllerManageHeroBuffRoundPatch
     {
@@ -595,6 +525,9 @@ namespace LimitedInvincible
     [HarmonyPatch(typeof(BattleUnit), nameof(BattleUnit.ChangeHp))]
     internal static class BattleUnitChangeHpPatch
     {
+        // TODO: 有玩家反馈部分召唤物造成的伤害不会消耗无敌次数。
+        // 当前 Mod 只拦截 BattleUnit.ChangeHp / ChangeTrueHp，后续需要继续核实
+        // 召唤物伤害是否存在绕过这两个入口的特殊扣血链路。
         [HarmonyPrefix]
         private static void Prefix(BattleUnit __instance, float num, ref PendingInvincibleConsume __state)
         {

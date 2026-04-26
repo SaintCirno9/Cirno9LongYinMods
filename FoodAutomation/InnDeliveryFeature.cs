@@ -307,7 +307,7 @@ namespace FoodAutomation
             _currentVisibleShopItemList = shopItemList;
         }
 
-        internal static bool IsTownTavernShop(ItemListData shopItemList)
+        internal static bool IsTownDeliveryShop(ItemListData shopItemList)
         {
             if (shopItemList == null)
             {
@@ -354,6 +354,32 @@ namespace FoodAutomation
             return false;
         }
 
+        internal static bool IsInnShop(ItemListData shopItemList)
+        {
+            if (shopItemList == null)
+            {
+                return false;
+            }
+
+            WorldData worldData = GameController.Instance?.worldData;
+            nint targetPointer = GetNativePointer(shopItemList);
+            if (worldData?.Inns == null || targetPointer == 0)
+            {
+                return false;
+            }
+
+            for (int i = 0; i < worldData.Inns.Count; i++)
+            {
+                InnData inn = worldData.Inns[i];
+                if (GetNativePointer(inn?.shopItemList) == targetPointer)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
         internal static bool ShouldShowOnCurrentUi(TradeUIController tradeUIController, ItemListData shopItemList)
         {
             return ShouldShowOnCurrentUi(tradeUIController, tradeUIController?.tradeUIType ?? default, shopItemList);
@@ -366,7 +392,8 @@ namespace FoodAutomation
                 return false;
             }
 
-            if (targetType == TradeUIType.Shop && IsTownTavernShop(shopItemList))
+            if (targetType == TradeUIType.Shop &&
+                (IsTownDeliveryShop(shopItemList) || IsInnShop(shopItemList)))
             {
                 return true;
             }

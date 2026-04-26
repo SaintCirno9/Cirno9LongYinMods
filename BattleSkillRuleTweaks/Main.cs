@@ -309,16 +309,16 @@ namespace BattleSkillRuleTweaks
         {
             AIBattlePlan currentGridAttackPlan = BuildCurrentGridAttackPlan(controller, nowActiveUnit);
             AIBattlePlan nextSupportedSkillPlan = BuildNextSupportedSkillPlan(controller, nowActiveUnit, heroData, usedSkill, currentGridAttackPlan != null);
-            AIBattlePlan defaultAiPlan = nextSupportedSkillPlan == null ? controller.GetValueableAIBattlePlan(AIBattlePlanType.Rest) : null;
-            AIBattlePlan fallbackAttackPlan = nextSupportedSkillPlan == null && defaultAiPlan == null ? currentGridAttackPlan : null;
-            AIBattlePlan plan = nextSupportedSkillPlan ?? defaultAiPlan ?? fallbackAttackPlan;
+            AIBattlePlan defaultAiPlan = nextSupportedSkillPlan == null && currentGridAttackPlan == null ? controller.GetValueableAIBattlePlan(AIBattlePlanType.Rest) : null;
+            AIBattlePlan plan = nextSupportedSkillPlan ?? currentGridAttackPlan ?? defaultAiPlan;
             if (plan == null)
             {
                 // Main.Log.Msg($"AI 技能后未生成后续计划，保留原版结束回合: type={(FightSkillType)usedSkill.Type()}");
                 return;
             }
 
-            ContinueAiTurnWithPlan(controller, heroData, plan, nextSupportedSkillPlan != null || fallbackAttackPlan != null);
+            // Main.Log.Msg($"AI 技能后选择后续计划: usedSkill={(FightSkillType)usedSkill.Type()}, nextBuff={nextSupportedSkillPlan != null}, currentAttack={currentGridAttackPlan != null}, defaultPlan={defaultAiPlan?.battlePlanType}, chosen={plan.battlePlanType}");
+            ContinueAiTurnWithPlan(controller, heroData, plan, nextSupportedSkillPlan != null || currentGridAttackPlan != null);
         }
 
         internal static AIBattlePlan BuildCurrentGridAttackPlan(BattleController controller, BattleUnit nowActiveUnit)
@@ -336,17 +336,31 @@ namespace BattleSkillRuleTweaks
 
             if (plan.battleAttackPlan == null || plan.battleAttackPlan.Count <= 0)
             {
+                // Main.Log.Msg($"AI 当前格攻击计划排除: moveTarget={DescribeGrid(nowActiveUnit.mapGrid)}, reason=无攻击计划");
                 return null;
             }
 
             AIBattleAttackPlan attackPlan = plan.battleAttackPlan[0];
-            if (attackPlan == null || attackPlan.activeSkill < 3 || !HasAvailableEnemyTarget(controller, attackPlan))
+            if (attackPlan == null)
             {
-                // Main.Log.Msg($"AI 跳后攻击计划排除: moveTarget={DescribeGrid(nowActiveUnit.mapGrid)}, raw={DescribePlanTargets(controller, plan)}");
+                // Main.Log.Msg($"AI 当前格攻击计划排除: moveTarget={DescribeGrid(nowActiveUnit.mapGrid)}, reason=空攻击计划");
                 return null;
             }
 
-            // Main.Log.Msg($"AI 跳后攻击计划接受: moveTarget={DescribeGrid(nowActiveUnit.mapGrid)}, raw={DescribePlanTargets(controller, plan)}");
+            if (attackPlan.activeSkill < 3)
+            {
+                // Main.Log.Msg($"AI 当前格攻击计划排除: moveTarget={DescribeGrid(nowActiveUnit.mapGrid)}, reason=非攻击技能, activeSkill={attackPlan.activeSkill}, targetCount={GetTargetGridCount(attackPlan)}, firstTarget={DescribeFirstTargetGrid(attackPlan)}");
+                return null;
+            }
+
+            if (!HasAvailableEnemyTarget(controller, attackPlan))
+            {
+                // Main.Log.Msg($"AI 当前格攻击计划排除: moveTarget={DescribeGrid(nowActiveUnit.mapGrid)}, reason=无可用敌方目标, activeSkill={attackPlan.activeSkill}, targetCount={GetTargetGridCount(attackPlan)}, firstTarget={DescribeFirstTargetGrid(attackPlan)}");
+                // LogAttackTargetDetails(controller, attackPlan);
+                return null;
+            }
+
+            // Main.Log.Msg($"AI 当前格攻击计划接受: moveTarget={DescribeGrid(nowActiveUnit.mapGrid)}, activeSkill={attackPlan.activeSkill}, value={attackPlan.planValue}, targetCount={GetTargetGridCount(attackPlan)}, firstTarget={DescribeFirstTargetGrid(attackPlan)}");
             return plan;
         }
 
@@ -463,6 +477,45 @@ namespace BattleSkillRuleTweaks
             return false;
         }
 
+        private static int GetTargetGridCount(AIBattleAttackPlan attackPlan)
+        {
+            return attackPlan?.attackTargetGridUnits == null ? 0 : attackPlan.attackTargetGridUnits.Count;
+        }
+
+        private static string DescribeFirstTargetGrid(AIBattleAttackPlan attackPlan)
+        {
+            if (attackPlan?.attackTargetGridUnits == null || attackPlan.attackTargetGridUnits.Count <= 0)
+            {
+                return "null";
+            }
+
+            return DescribeGrid(attackPlan.attackTargetGridUnits[0]);
+        }
+
+        private static void LogAttackTargetDetails(BattleController controller, AIBattleAttackPlan attackPlan)
+        {
+            if (attackPlan?.attackTargetGridUnits == null)
+            {
+                return;
+            }
+
+            int currentTeamID = controller?.nowActiveUnit?.battleTeam == null ? -999 : controller.nowActiveUnit.battleTeam.ID;
+            int logCount = attackPlan.attackTargetGridUnits.Count < 12 ? attackPlan.attackTargetGridUnits.Count : 12;
+            for (int i = 0; i < logCount; i++)
+            {
+                GridUnitData targetGrid = attackPlan.attackTargetGridUnits[i];
+                BattleUnit battleUnit = targetGrid?.battleUnit;
+                int targetTeamID = battleUnit?.battleTeam == null ? -999 : battleUnit.battleTeam.ID;
+                bool availableEnemy = controller != null && controller.HaveAvailableEnemyUnit(targetGrid);
+                // Main.Log.Msg($"AI 当前格攻击目标明细: index={i}, grid={DescribeGrid(targetGrid)}, hasUnit={battleUnit != null}, targetAlive={battleUnit?.IsAlive}, targetTeam={targetTeamID}, currentTeam={currentTeamID}, availableEnemy={availableEnemy}");
+            }
+
+            if (attackPlan.attackTargetGridUnits.Count > logCount)
+            {
+                // Main.Log.Msg($"AI 当前格攻击目标明细: omitted={attackPlan.attackTargetGridUnits.Count - logCount}");
+            }
+        }
+
         internal static AIBattlePlan BuildNextSupportedSkillPlan(BattleController controller, BattleUnit nowActiveUnit, HeroData heroData, KungfuSkillLvData usedSkill, bool useDodgeInPlace)
         {
             if (nowActiveUnit?.mapGrid == null || !TryGetNextSupportedSkill(heroData, usedSkill, out int activeSkill))
@@ -474,6 +527,7 @@ namespace BattleSkillRuleTweaks
             {
                 if (useDodgeInPlace)
                 {
+                    // Main.Log.Msg($"AI 轻功原地释放: reason=已有后续攻击计划, current={DescribeGrid(nowActiveUnit.mapGrid)}");
                     return BuildDirectSkillPlan(activeSkill, nowActiveUnit.mapGrid, nowActiveUnit.mapGrid, 999999f);
                 }
 
@@ -481,11 +535,11 @@ namespace BattleSkillRuleTweaks
                 AIBattlePlan dodgePlan = BuildDodgeSkillPlan(controller, nowActiveUnit, heroData.dodgeSkill);
                 if (dodgePlan != null)
                 {
-                    // Main.Log.Msg($"AI 轻功计划生成成功: moveTarget={DescribeGrid(dodgePlan.moveTarget)}, current={DescribeGrid(nowActiveUnit.mapGrid)}");
+                    // Main.Log.Msg($"AI 轻功计划生成成功: moveTarget={DescribeGrid(dodgePlan.moveTarget)}, current={DescribeGrid(nowActiveUnit.mapGrid)}, value={dodgePlan.bestPlanValue}");
                     return dodgePlan;
                 }
 
-                // Main.Log.Warning($"AI 轻功计划生成失败，回退到当前格释放: current={DescribeGrid(nowActiveUnit.mapGrid)}");
+                Main.Log.Warning($"AI 轻功计划生成失败: current={DescribeGrid(nowActiveUnit.mapGrid)}");
                 return null;
             }
 
@@ -528,46 +582,53 @@ namespace BattleSkillRuleTweaks
             GridUnitData bestAttackTarget = null;
             float bestAttackValue = float.MinValue;
             int bestAttackDistance = -1;
+            int bestEnemyDistance = int.MaxValue;
 
-            // Main.Log.Msg($"AI 轻功候选开始: current={DescribeGrid(nowActiveUnit.mapGrid)}, targetCount={targetGrids.Count}, originalBest={DescribeGrid(controller.GetBestValueGrid(targetGrids))}");
+            // Main.Log.Msg($"AI 轻功候选开始: current={DescribeGrid(nowActiveUnit.mapGrid)}, targetCount={targetGrids.Count}");
             for (int i = 0; i < targetGrids.Count; i++)
             {
                 GridUnitData targetGrid = targetGrids[i];
-                if (!IsValidDodgeTargetGrid(nowActiveUnit.mapGrid, dodgeSkill, targetGrid))
+                string invalidReason = GetInvalidDodgeTargetReason(nowActiveUnit.mapGrid, dodgeSkill, targetGrid);
+                if (invalidReason != null)
                 {
                     // Main.Log.Msg($"AI 轻功目标排除: index={i}, target={DescribeGrid(targetGrid)}, reason={invalidReason}");
                     continue;
                 }
 
                 int distance = nowActiveUnit.mapGrid.Distance(targetGrid);
-                // Main.Log.Msg($"AI 轻功目标合法: index={i}, target={DescribeGrid(targetGrid)}, distance={distance}");
 
-                AIBattlePlan followUpPlan = BuildAttackPlanFromGrid(controller, targetGrid);
-                if (followUpPlan == null)
-                {
-                    // Main.Log.Msg($"AI 轻功跳后攻击评估: target={DescribeGrid(targetGrid)}, result=无可攻击敌方计划");
-                    continue;
-                }
-
-                // Main.Log.Msg($"AI 轻功跳后攻击评估: target={DescribeGrid(targetGrid)}, result=可攻击敌方, followUp={DescribePlanTargets(controller, followUpPlan)}");
-                if (bestAttackTarget == null || followUpPlan.bestPlanValue > bestAttackValue || followUpPlan.bestPlanValue == bestAttackValue && distance > bestAttackDistance)
+                float planValue = GetDodgeTargetPlanValue(controller, targetGrid);
+                int enemyDistance = GetNearestEnemyDistance(controller, targetGrid);
+                // Main.Log.Msg($"AI 轻功目标评分: index={i}, target={DescribeGrid(targetGrid)}, distance={distance}, enemyDistance={enemyDistance}, value={planValue}");
+                if (bestAttackTarget == null ||
+                    planValue > bestAttackValue ||
+                    planValue == bestAttackValue && enemyDistance < bestEnemyDistance ||
+                    planValue == bestAttackValue && enemyDistance == bestEnemyDistance && targetGrid == nowActiveUnit.mapGrid && bestAttackTarget != nowActiveUnit.mapGrid)
                 {
                     bestAttackTarget = targetGrid;
-                    bestAttackValue = followUpPlan.bestPlanValue;
+                    bestAttackValue = planValue;
                     bestAttackDistance = distance;
-                    // Main.Log.Msg($"AI 轻功能接攻击候选更新: index={i}, target={DescribeGrid(targetGrid)}, followUpValue={followUpPlan.bestPlanValue}, distance={distance}");
+                    bestEnemyDistance = enemyDistance;
+                    // Main.Log.Msg($"AI 轻功候选更新: index={i}, target={DescribeGrid(targetGrid)}, value={planValue}, distance={distance}, enemyDistance={enemyDistance}");
                 }
             }
 
             bool useAttackTarget = bestAttackTarget != null;
             if (!useAttackTarget)
             {
-                // Main.Log.Msg($"AI 轻功取消: reason=无跳后攻击点, current={DescribeGrid(nowActiveUnit.mapGrid)}");
+                // Main.Log.Msg($"AI 轻功取消: reason=无合法评分点, current={DescribeGrid(nowActiveUnit.mapGrid)}");
                 return null;
             }
 
-            // Main.Log.Msg($"AI 轻功最终选点: reason=跳后可攻击敌方, target={DescribeGrid(bestAttackTarget)}, value={bestAttackValue}, distance={bestAttackDistance}");
+            // Main.Log.Msg($"AI 轻功最终选点: target={DescribeGrid(bestAttackTarget)}, value={bestAttackValue}, distance={bestAttackDistance}, enemyDistance={bestEnemyDistance}");
             return BuildDirectSkillPlan(1, nowActiveUnit.mapGrid, bestAttackTarget, bestAttackValue);
+        }
+
+        private static float GetDodgeTargetPlanValue(BattleController controller, GridUnitData targetGrid)
+        {
+            AIBattlePlan followUpPlan = BuildAttackPlanFromGrid(controller, targetGrid);
+            float attackValue = followUpPlan == null ? 0f : followUpPlan.bestPlanValue;
+            return attackValue + GetSpeGridValueRate(targetGrid);
         }
 
         private static Il2CppSystem.Collections.Generic.List<GridUnitData> BuildDodgeTargetGrids(BattleController controller, BattleUnit nowActiveUnit, KungfuSkillLvData dodgeSkill)
@@ -587,37 +648,121 @@ namespace BattleSkillRuleTweaks
 
         private static bool IsValidDodgeTargetGrid(GridUnitData currentGrid, KungfuSkillLvData dodgeSkill, GridUnitData targetGrid)
         {
+            return GetInvalidDodgeTargetReason(currentGrid, dodgeSkill, targetGrid) == null;
+        }
+
+        private static string GetInvalidDodgeTargetReason(GridUnitData currentGrid, KungfuSkillLvData dodgeSkill, GridUnitData targetGrid)
+        {
             if (targetGrid == null)
             {
-                return false;
+                return "空格";
             }
 
-            if (targetGrid.battleUnit != null)
+            if (targetGrid != currentGrid && targetGrid.battleUnit != null)
             {
-                return false;
+                return "已有单位";
             }
 
             if (targetGrid.obstale != null)
             {
-                return false;
+                return "有障碍物";
             }
 
             if (targetGrid.GridType == GridType.Obstacle)
             {
-                return false;
+                return "障碍格";
             }
 
-            if (!targetGrid.isEmpty())
+            if (IsHazardousSpeGrid(targetGrid))
+            {
+                return "危险特殊格";
+            }
+
+            if (targetGrid != currentGrid && !targetGrid.isEmpty())
+            {
+                return "非空格";
+            }
+
+            if (targetGrid != currentGrid && !IsInDodgeRange(currentGrid, dodgeSkill, targetGrid))
+            {
+                return "超出轻功范围";
+            }
+
+            return null;
+        }
+
+        private static bool IsHazardousSpeGrid(GridUnitData targetGrid)
+        {
+            SpeGridObjData speGridObjData = targetGrid?.speGridObjData;
+            if (speGridObjData == null)
             {
                 return false;
             }
 
-            if (!IsInDodgeRange(currentGrid, dodgeSkill, targetGrid))
+            if (speGridObjData.GetValueRate() < 0f)
             {
-                return false;
+                return true;
             }
 
-            return true;
+            SpeGridObjType speGridObjType = speGridObjData.speGridObjType;
+            return speGridObjType == SpeGridObjType.PoisonInsect ||
+                   speGridObjType == SpeGridObjType.PoisonLake ||
+                   speGridObjType == SpeGridObjType.ArrowTrap ||
+                   speGridObjType == SpeGridObjType.Spike ||
+                   speGridObjType == SpeGridObjType.StoneTrap ||
+                   speGridObjType == SpeGridObjType.HotCarbon;
+        }
+
+        private static float GetSpeGridValueRate(GridUnitData targetGrid)
+        {
+            SpeGridObjData speGridObjData = targetGrid?.speGridObjData;
+            return speGridObjData == null ? 0f : speGridObjData.GetValueRate();
+        }
+
+        private static int GetNearestEnemyDistance(BattleController controller, GridUnitData targetGrid)
+        {
+            BattleUnit nowActiveUnit = controller?.nowActiveUnit;
+            if (nowActiveUnit == null || targetGrid == null || controller.teams == null)
+            {
+                return int.MaxValue;
+            }
+
+            int nearestDistance = int.MaxValue;
+            for (int teamIndex = 0; teamIndex < controller.teams.Count; teamIndex++)
+            {
+                BattleTeam team = controller.teams[teamIndex];
+                if (team == null || team == nowActiveUnit.battleTeam || team.battleUnits == null)
+                {
+                    continue;
+                }
+
+                for (int unitIndex = 0; unitIndex < team.battleUnits.Count; unitIndex++)
+                {
+                    BattleUnit battleUnit = team.battleUnits[unitIndex];
+                    if (battleUnit == null || !battleUnit.IsAlive || battleUnit.mapGrid == null)
+                    {
+                        continue;
+                    }
+
+                    int distance = targetGrid.Distance(battleUnit.mapGrid);
+                    if (distance < nearestDistance)
+                    {
+                        nearestDistance = distance;
+                    }
+                }
+            }
+
+            return nearestDistance;
+        }
+
+        private static string DescribeGrid(GridUnitData grid)
+        {
+            if (grid == null)
+            {
+                return "null";
+            }
+
+            return $"map={grid.mapID}, row={grid.row}, col={grid.column}";
         }
 
         private static bool IsInDodgeRange(GridUnitData currentGrid, KungfuSkillLvData dodgeSkill, GridUnitData targetGrid)
