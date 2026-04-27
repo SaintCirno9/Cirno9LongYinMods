@@ -1,7 +1,7 @@
 DualCultivation
 
 功能：
-- 在 NPC 对话的“修行”分支追加“开始双修”选项。
+- 在 NPC 对话的“修行”分支追加“双修”选项。
 - 默认要求对方好感达到 100，且对方是当前伴侣。
 - 双修默认耗时 1 天，不可取消；完成后双方按对方生命、内力上限获得上限提升，并提升对方好感 10 点。
 
@@ -25,13 +25,18 @@ DualCultivation
 - `FavorGain=10`：完成后增加的对方好感；小于 0 时回退默认值。
 - `PromptText={称呼}可愿与我共参阴阳、同调内息？|今日气息圆融，{称呼}可愿与我同修一日？|我近日修行略有所悟，想与{称呼}互证一番。|若{称呼}得闲，不妨与我闭关同修。|你我内息相近，今日同修或许会有所进境。`：确认对话文本。可用 `|` 分隔多条文本，确认时随机显示其中一条。
 - `RewardPreviewText=可获得{HpGain}点生命上限和{ManaGain}点内力上限，对方可获得{TargetHpGain}点生命上限和{TargetManaGain}点内力上限。`：收益预览文本。
-- `StartChoiceText=开始双修`：开始选项文本。
+- `StartChoiceText=双修`：修行菜单入口选项文本。
+- `ConfirmChoiceText=开始双修`：确认对话开始选项文本。
 - `CancelChoiceText=转念一想`：取消选项文本。
 - `ResultText=此番双修我获益匪浅，不知{称呼}收获如何？|今日与你气机相合，周天运转竟比平日顺畅许多。|此番同修之效远胜独自闭关，看来你我确有默契。|真气往复之间，我隐有所悟，想来{称呼}也必有所获。|这一日修行颇有进境，若日后得闲，不妨再试。`：完成后对话文本。可用 `|` 分隔多条文本，完成时随机显示其中一条。
 - `ResultChoiceText=我亦获益良多`：完成后选项文本。
+- `BackPic=PlotImage/萍水相逢`：确认和完成对话使用的背景图，留空则不指定背景。
 - `VerboseLog=false`：是否输出详细日志。
 
 文本里的 `{称呼}` 会替换为对方对玩家的称呼；收益文本支持 `{HpGain}`、`{ManaGain}`、`{TargetHpGain}`、`{TargetManaGain}` 占位符。
+
+当前从原版事件中确认过的背景图名：
+`PlotImage/风光大好`、`PlotImage/比武擂台`、`PlotImage/张灯结彩`、`PlotImage/节庆氛围`、`PlotImage/野外探索`、`PlotImage/神秘地窖`、`PlotImage/乡野庙会`、`PlotImage/商队行路`、`PlotImage/强盗围攻`、`PlotImage/两人争斗`、`PlotImage/萍水相逢`、`PlotImage/暗器出手`、`PlotImage/受伤侠士`、`PlotImage/高手对峙`、`PlotImage/多人争斗`、`PlotImage/未知路人`、`PlotImage/乱葬荒坟`、`PlotImage/暗处躲藏`、`PlotImage/落荒而逃`、`PlotImage/喧闹宴会`、`练武场`、`赛马场`、`闹市人群`、`祠堂`、`驿站`。
 
 发布文件：
 1. DLL：`DualCultivation.dll`

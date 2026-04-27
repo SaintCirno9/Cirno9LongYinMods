@@ -18,10 +18,12 @@ namespace DualCultivation
         private const string OldDefaultResultText = "此番双修我获益匪浅，不知称呼收获如何？";
         private const string DefaultPromptText = "{称呼}可愿与我共参阴阳、同调内息？|今日气息圆融，{称呼}可愿与我同修一日？|我近日修行略有所悟，想与{称呼}互证一番。|若{称呼}得闲，不妨与我闭关同修。|你我内息相近，今日同修或许会有所进境。";
         private const string DefaultRewardPreviewText = "可获得{HpGain}点生命上限和{ManaGain}点内力上限，对方可获得{TargetHpGain}点生命上限和{TargetManaGain}点内力上限。";
-        private const string DefaultStartChoiceText = "开始双修";
+        private const string DefaultStartChoiceText = "双修";
+        private const string DefaultConfirmChoiceText = "开始双修";
         private const string DefaultCancelChoiceText = "转念一想";
         private const string DefaultResultText = "此番双修我获益匪浅，不知{称呼}收获如何？|今日与你气机相合，周天运转竟比平日顺畅许多。|此番同修之效远胜独自闭关，看来你我确有默契。|真气往复之间，我隐有所悟，想来{称呼}也必有所获。|这一日修行颇有进境，若日后得闲，不妨再试。";
         private const string DefaultResultChoiceText = "我亦获益良多";
+        private const string DefaultBackPic = "PlotImage/萍水相逢";
         private const bool DefaultVerboseLog = false;
 
         private static MelonPreferences_Category _category = null!;
@@ -41,9 +43,11 @@ namespace DualCultivation
         internal static MelonPreferences_Entry<string> PromptText { get; private set; } = null!;
         internal static MelonPreferences_Entry<string> RewardPreviewText { get; private set; } = null!;
         internal static MelonPreferences_Entry<string> StartChoiceText { get; private set; } = null!;
+        internal static MelonPreferences_Entry<string> ConfirmChoiceText { get; private set; } = null!;
         internal static MelonPreferences_Entry<string> CancelChoiceText { get; private set; } = null!;
         internal static MelonPreferences_Entry<string> ResultText { get; private set; } = null!;
         internal static MelonPreferences_Entry<string> ResultChoiceText { get; private set; } = null!;
+        internal static MelonPreferences_Entry<string> BackPic { get; private set; } = null!;
         internal static MelonPreferences_Entry<bool> VerboseLog { get; private set; } = null!;
 
         internal static void Initialize()
@@ -69,10 +73,12 @@ namespace DualCultivation
             FavorGain = _category.CreateEntry("FavorGain", DefaultFavorGain, description: "完成后增加的对方好感");
             PromptText = _category.CreateEntry("PromptText", DefaultPromptText, description: "确认对话文本");
             RewardPreviewText = _category.CreateEntry("RewardPreviewText", DefaultRewardPreviewText, description: "收益预览文本");
-            StartChoiceText = _category.CreateEntry("StartChoiceText", DefaultStartChoiceText, description: "开始选项文本");
+            StartChoiceText = _category.CreateEntry("StartChoiceText", DefaultStartChoiceText, description: "修行菜单入口选项文本");
+            ConfirmChoiceText = _category.CreateEntry("ConfirmChoiceText", DefaultConfirmChoiceText, description: "确认对话开始选项文本");
             CancelChoiceText = _category.CreateEntry("CancelChoiceText", DefaultCancelChoiceText, description: "取消选项文本");
             ResultText = _category.CreateEntry("ResultText", DefaultResultText, description: "完成后对话文本");
             ResultChoiceText = _category.CreateEntry("ResultChoiceText", DefaultResultChoiceText, description: "完成后选项文本");
+            BackPic = _category.CreateEntry("BackPic", DefaultBackPic, description: "确认和完成对话使用的背景图，留空则不指定背景");
             VerboseLog = _category.CreateEntry("VerboseLog", DefaultVerboseLog, description: "是否输出详细日志");
 
             Normalize();
@@ -140,6 +146,11 @@ namespace DualCultivation
                 StartChoiceText.Value = DefaultStartChoiceText;
             }
 
+            if (string.IsNullOrWhiteSpace(ConfirmChoiceText.Value))
+            {
+                ConfirmChoiceText.Value = DefaultConfirmChoiceText;
+            }
+
             if (string.IsNullOrWhiteSpace(CancelChoiceText.Value))
             {
                 CancelChoiceText.Value = DefaultCancelChoiceText;
@@ -157,6 +168,11 @@ namespace DualCultivation
             if (string.IsNullOrWhiteSpace(ResultChoiceText.Value))
             {
                 ResultChoiceText.Value = DefaultResultChoiceText;
+            }
+
+            if (BackPic.Value == null)
+            {
+                BackPic.Value = DefaultBackPic;
             }
         }
 

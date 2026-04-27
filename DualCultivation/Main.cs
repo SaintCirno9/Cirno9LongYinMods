@@ -222,7 +222,7 @@ namespace DualCultivation
 
             RewardPreview preview = CalculateReward(player, target);
             Il2CppCollections.List<SinglePlotChoiceData> choices = new();
-            choices.Add(CreateChoice(DualCultivationConfig.StartChoiceText.Value, ConfirmMarker));
+            choices.Add(CreateChoice(DualCultivationConfig.ConfirmChoiceText.Value, ConfirmMarker));
             choices.Add(CreateChoice(DualCultivationConfig.CancelChoiceText.Value, "HideInteractUI"));
 
             string prompt = FormatText(ChooseText(DualCultivationConfig.PromptText.Value), player, target, preview);
@@ -231,7 +231,8 @@ namespace DualCultivation
             {
                 plotText = $"{prompt}\n{rewardPreview}",
                 choices = choices,
-                plotTarget = PlotTargetHeroType.Keep
+                plotTarget = PlotTargetHeroType.Keep,
+                backPic = DualCultivationConfig.BackPic.Value
             };
 
             controller.ChangePlot(plot);
@@ -274,7 +275,8 @@ namespace DualCultivation
                 plotSource = PlotTargetHeroType.HeroID,
                 sourceName = player?.heroID.ToString() ?? string.Empty,
                 plotTarget = PlotTargetHeroType.HeroID,
-                targetName = target.heroID.ToString()
+                targetName = target.heroID.ToString(),
+                backPic = DualCultivationConfig.BackPic.Value
             };
 
             PlotController.Instance?.AddPlot(plot);
