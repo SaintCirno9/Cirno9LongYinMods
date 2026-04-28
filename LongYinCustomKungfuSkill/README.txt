@@ -34,9 +34,9 @@
 11. 自定义图标用法：
    - 可以把 PNG 放在根目录 `UserData\LongYinCustomKungfuSkill\Icons` 中。
    - 也可以放在某个数据目录自己的 `Data\数字目录\Icons` 中。
-   - 文件名必须和功法 `id` 一致，例如：`996.png`。
+   - 文件名必须和配置里写的功法 `id` 一致，例如：`10000.png`。
    - 这套规则同时适用于“配置里写明的原版功法”和“新增的自定义功法”。
-   - 若某个功法来自 `Data\100`，Mod 会优先读取 `Data\100\Icons\996.png`，找不到时再回退到根目录 `Icons\996.png`。
+   - 若某个功法来自 `Data\100`，Mod 会优先读取 `Data\100\Icons\10000.png`，找不到时再回退到根目录 `Icons\10000.png`。
    - 若没有对应 PNG，Mod 会自动从原版同类型功法里挑一个图标进行分配。
 12. 原版图标导出用法：
    - 打开 `UserData\LongYinCustomKungfuSkill\LongYinCustomKungfuSkill.cfg`。
