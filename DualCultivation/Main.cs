@@ -5,7 +5,7 @@ using MelonLoader;
 using System;
 using UnityEngine.UI;
 
-[assembly: MelonInfo(typeof(DualCultivation.Main), "DualCultivation", "1.1.0", "SaintCirno9", null)]
+[assembly: MelonInfo(typeof(DualCultivation.Main), "DualCultivation", "1.1.1", "SaintCirno9", null)]
 [assembly: MelonGame("TppStudio", "LongYinLiZhiZhuan")]
 
 namespace DualCultivation
@@ -32,12 +32,14 @@ namespace DualCultivation
     {
         internal const string StartMarker = "DualCultivation.Start";
         internal const string ConfirmMarker = "DualCultivation.Confirm";
+        internal const string CancelMarker = "DualCultivation.Cancel";
 
         private const string WorkName = "双修";
         private const string MonthlyCooldownText = "（本月已双修）";
         private const string AvailableHintText = "与对方双修一日，提升双方生命与内力上限";
 
         private static PendingSession? _pendingSession;
+        private static SinglePlotData _returnPlot;
         private static bool _dualCultivationWorking;
         private static readonly Random Random = new();
 
@@ -133,6 +135,12 @@ namespace DualCultivation
                 return false;
             }
 
+            if (choiceData.callFuc == CancelMarker)
+            {
+                ReturnToStudyMenu(PlotController.Instance);
+                return false;
+            }
+
             return true;
         }
 
@@ -221,9 +229,10 @@ namespace DualCultivation
             }
 
             RewardPreview preview = CalculateReward(player, target);
+            _returnPlot = controller.nowSinglePlot;
             Il2CppCollections.List<SinglePlotChoiceData> choices = new();
             choices.Add(CreateChoice(DualCultivationConfig.ConfirmChoiceText.Value, ConfirmMarker));
-            choices.Add(CreateChoice(DualCultivationConfig.CancelChoiceText.Value, "HideInteractUI"));
+            choices.Add(CreateChoice(DualCultivationConfig.CancelChoiceText.Value, CancelMarker));
 
             string prompt = FormatText(ChooseText(DualCultivationConfig.PromptText.Value), player, target, preview);
             string rewardPreview = FormatText(DualCultivationConfig.RewardPreviewText.Value, player, target, preview);
@@ -256,10 +265,24 @@ namespace DualCultivation
                 preview.TargetHpGain,
                 preview.TargetManaGain);
             MarkCultivatedThisMonth(player, target);
+            _returnPlot = null;
 
             controller?.HideInteractUIImmediate();
             WorkingUIController.Instance?.StartWorking(WorkName, DualCultivationConfig.WorkDays.Value, string.Empty, string.Empty, string.Empty, string.Empty, true);
             _dualCultivationWorking = true;
+        }
+
+        private static void ReturnToStudyMenu(PlotController controller)
+        {
+            SinglePlotData returnPlot = _returnPlot;
+            _returnPlot = null;
+            if (controller != null && returnPlot != null)
+            {
+                controller.ChangePlot(returnPlot);
+                return;
+            }
+
+            controller?.HideInteractUI();
         }
 
         private static void ShowResultPlot(HeroData target)
