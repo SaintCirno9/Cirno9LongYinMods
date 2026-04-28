@@ -16,6 +16,7 @@ namespace DualCultivation
         private const int DefaultFavorGain = 10;
         private const string OldDefaultPromptText = "称呼想和我双修吗？";
         private const string OldDefaultResultText = "此番双修我获益匪浅，不知称呼收获如何？";
+        private const string OldDefaultStartChoiceText = "开始双修";
         private const string DefaultPromptText = "{称呼}可愿与我共参阴阳、同调内息？|今日气息圆融，{称呼}可愿与我同修一日？|我近日修行略有所悟，想与{称呼}互证一番。|若{称呼}得闲，不妨与我闭关同修。|你我内息相近，今日同修或许会有所进境。";
         private const string DefaultRewardPreviewText = "可获得{HpGain}点生命上限和{ManaGain}点内力上限，对方可获得{TargetHpGain}点生命上限和{TargetManaGain}点内力上限。";
         private const string DefaultStartChoiceText = "双修";
@@ -142,6 +143,10 @@ namespace DualCultivation
             }
 
             if (string.IsNullOrWhiteSpace(StartChoiceText.Value))
+            {
+                StartChoiceText.Value = DefaultStartChoiceText;
+            }
+            else if (StartChoiceText.Value == OldDefaultStartChoiceText)
             {
                 StartChoiceText.Value = DefaultStartChoiceText;
             }

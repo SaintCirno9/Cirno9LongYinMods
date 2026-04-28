@@ -40,4 +40,4 @@ DualCultivation
 
 发布文件：
 1. DLL：`DualCultivation.dll`
-2. 压缩包：`DualCultivation-v1.0.0.zip`
+2. 压缩包：`DualCultivation-v1.1.0.zip`

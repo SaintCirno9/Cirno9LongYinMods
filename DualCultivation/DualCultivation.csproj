@@ -65,7 +65,7 @@
           if (match.Success) {
               ModVersion = match.Groups[1].Value;
           } else {
-              ModVersion = "1.0.0";
+              ModVersion = "1.1.0";
           }
         ]]>
       </Code>
