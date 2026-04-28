@@ -6,7 +6,7 @@ using System;
 using System.Reflection;
 using System.Runtime.InteropServices;
 
-[assembly: MelonInfo(typeof(BattleSkillRuleTweaks.Main), "BattleSkillRuleTweaks", "1.2.0", "SaintCirno9", null)]
+[assembly: MelonInfo(typeof(BattleSkillRuleTweaks.Main), "BattleSkillRuleTweaks", "1.3.0", "SaintCirno9", null)]
 [assembly: MelonGame("TppStudio", "LongYinLiZhiZhuan")]
 
 namespace BattleSkillRuleTweaks
@@ -16,7 +16,7 @@ namespace BattleSkillRuleTweaks
         internal static MelonLogger.Instance Log => Melon<Main>.Logger;
 
         private const int BattleUnitAttackEndThisOffset = 0x20;
-        private const int BattleControllerNowActiveUnitAttackedOffset = 0x119;
+        private const int BattleControllerNowActiveUnitAttackedOffset = 0x121;
         internal static readonly MethodInfo GetAttackRangeGridsMethod = AccessTools.Method(typeof(BattleController), "GetAttackRangeGrids");
 
         public override void OnInitializeMelon()
