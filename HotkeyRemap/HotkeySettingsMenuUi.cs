@@ -17,7 +17,7 @@ namespace HotkeyRemap
         private const string PanelName = "HotkeyRemap_Panel";
         private const string RowButtonPrefix = "HotkeyRemap_RowButton_";
         private const float PanelWidth = 640f;
-        private const float PanelHeight = 740f;
+        private const float PanelHeight = 920f;
         private const float RowHeight = 32f;
         private const float RowStartY = -96f;
         private const float RowGap = 30f;
@@ -31,7 +31,12 @@ namespace HotkeyRemap
             new("剧情推进", () => Main.Config.PlotAdvance, key => Main.Config.PlotAdvance = key),
             new("人物详情", () => Main.Config.HeroDetail, key => Main.Config.HeroDetail = key),
             new("离开城市", () => Main.Config.LeaveCity, key => Main.Config.LeaveCity = key),
-            new("显示地图", () => Main.Config.ShowMap, key => Main.Config.ShowMap = key),
+            new("地图", () => Main.Config.ShowMap, key => Main.Config.ShowMap = key),
+            new("门派", () => Main.Config.SectMenu, key => Main.Config.SectMenu = key),
+            new("名录", () => Main.Config.Roster, key => Main.Config.Roster = key),
+            new("返回门派", () => Main.Config.ReturnSect, key => Main.Config.ReturnSect = key),
+            new("聚焦自身", () => Main.Config.FocusSelf, key => Main.Config.FocusSelf = key),
+            new("马匹冲刺", () => Main.Config.HorseSprint, key => Main.Config.HorseSprint = key),
             new("战斗自动", () => Main.Config.BattleAutoToggle, key => Main.Config.BattleAutoToggle = key),
             new("战斗动作 W", () => Main.Config.BattleActionFastW, key => Main.Config.BattleActionFastW = key),
             new("战斗动作 E", () => Main.Config.BattleActionFastE, key => Main.Config.BattleActionFastE = key),
@@ -206,7 +211,18 @@ namespace HotkeyRemap
                 new Vector2(24f, -76f),
                 new Vector2(560f, 28f));
 
-            Button closeButton = CreateStandaloneButton(_panel.transform, "HotkeyRemap_CloseButton", "关闭", 18, (UnityAction)(() => SetPanelVisible(false)));
+            Button resetButton = CreateStandaloneButton(_panel.transform, "HotkeyRemap_ResetButton", "重置", 18, (UnityAction)ResetHotkeys);
+            RectTransform resetRect = resetButton?.GetComponent<RectTransform>();
+            if (resetRect != null)
+            {
+                resetRect.anchorMin = new Vector2(1f, 1f);
+                resetRect.anchorMax = new Vector2(1f, 1f);
+                resetRect.pivot = new Vector2(1f, 1f);
+                resetRect.anchoredPosition = new Vector2(-88f, -18f);
+                resetRect.sizeDelta = new Vector2(132f, 32f);
+            }
+
+            Button closeButton = CreateStandaloneButton(_panel.transform, "HotkeyRemap_CloseButton", "×", 24, (UnityAction)(() => SetPanelVisible(false)));
             RectTransform closeRect = closeButton?.GetComponent<RectTransform>();
             if (closeRect != null)
             {
@@ -214,7 +230,13 @@ namespace HotkeyRemap
                 closeRect.anchorMax = new Vector2(1f, 1f);
                 closeRect.pivot = new Vector2(1f, 1f);
                 closeRect.anchoredPosition = new Vector2(-24f, -18f);
-                closeRect.sizeDelta = new Vector2(120f, 32f);
+                closeRect.sizeDelta = new Vector2(56f, 32f);
+                SetButtonColors(
+                    closeButton,
+                    new Color(0.72f, 0.08f, 0.08f, 0.98f),
+                    new Color(0.88f, 0.12f, 0.12f, 1f),
+                    new Color(0.55f, 0.04f, 0.04f, 1f),
+                    Color.white);
             }
 
             for (int i = 0; i < BindingEntries.Count; i++)
@@ -311,6 +333,50 @@ namespace HotkeyRemap
             }
 
             _pendingBinding = null;
+            RefreshAll();
+        }
+
+        private static void ResetHotkeys()
+        {
+            HotkeyRemapConfig defaultConfig = HotkeyRemapConfig.CreateDefault();
+
+            Main.Config.QuickSave = defaultConfig.QuickSave;
+            Main.Config.QuickLoad = defaultConfig.QuickLoad;
+            Main.Config.MissionToggle = defaultConfig.MissionToggle;
+            Main.Config.BigMapRest = defaultConfig.BigMapRest;
+            Main.Config.PlotAdvance = defaultConfig.PlotAdvance;
+            Main.Config.HeroDetail = defaultConfig.HeroDetail;
+            Main.Config.LeaveCity = defaultConfig.LeaveCity;
+            Main.Config.ShowMap = defaultConfig.ShowMap;
+            Main.Config.SectMenu = defaultConfig.SectMenu;
+            Main.Config.Roster = defaultConfig.Roster;
+            Main.Config.ReturnSect = defaultConfig.ReturnSect;
+            Main.Config.FocusSelf = defaultConfig.FocusSelf;
+            Main.Config.HorseSprint = defaultConfig.HorseSprint;
+            Main.Config.BattleAutoToggle = defaultConfig.BattleAutoToggle;
+            Main.Config.BattleActionFastW = defaultConfig.BattleActionFastW;
+            Main.Config.BattleActionFastE = defaultConfig.BattleActionFastE;
+            Main.Config.BattleActionFastS = defaultConfig.BattleActionFastS;
+            Main.Config.BattleActionFastD = defaultConfig.BattleActionFastD;
+            Main.Config.BattleActionFastX = defaultConfig.BattleActionFastX;
+            Main.Config.BattleActionFastC = defaultConfig.BattleActionFastC;
+            Main.Config.StudyUp = defaultConfig.StudyUp;
+            Main.Config.StudyDown = defaultConfig.StudyDown;
+            Main.Config.StudyLeft = defaultConfig.StudyLeft;
+            Main.Config.StudyRight = defaultConfig.StudyRight;
+            Main.Config.UiSubmit = defaultConfig.UiSubmit;
+            Main.Config.UiCancel = defaultConfig.UiCancel;
+
+            _pendingBinding = null;
+            SyncRuntimeHotkeyState();
+            HotkeyRemapConfigStore.Save(Main.Config, Main.Log);
+            BattleHotkeyListHelper.TryApplyConfiguredLists();
+
+            if (_statusText != null)
+            {
+                _statusText.text = "已重置为默认热键。";
+            }
+
             RefreshAll();
         }
 
@@ -759,6 +825,43 @@ namespace HotkeyRemap
                 text.alignment = TextAnchor.MiddleCenter;
                 text.color = Color.black;
                 text.raycastTarget = false;
+            }
+        }
+
+        private static void SetButtonColors(Button button, Color normalColor, Color highlightedColor, Color pressedColor, Color textColor)
+        {
+            if (button == null)
+            {
+                return;
+            }
+
+            Image image = button.GetComponent<Image>();
+            if (image != null)
+            {
+                image.color = normalColor;
+            }
+
+            ColorBlock colors = button.colors;
+            colors.normalColor = normalColor;
+            colors.highlightedColor = highlightedColor;
+            colors.pressedColor = pressedColor;
+            colors.selectedColor = highlightedColor;
+            colors.disabledColor = new Color(normalColor.r, normalColor.g, normalColor.b, 0.55f);
+            button.colors = colors;
+
+            Text[] texts = button.gameObject.GetComponentsInChildren<Text>(true);
+            if (texts == null)
+            {
+                return;
+            }
+
+            for (int i = 0; i < texts.Length; i++)
+            {
+                Text text = texts[i];
+                if (text != null)
+                {
+                    text.color = textColor;
+                }
             }
         }
 

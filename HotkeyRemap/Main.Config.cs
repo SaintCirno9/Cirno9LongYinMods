@@ -30,7 +30,17 @@ namespace HotkeyRemap
 
         internal KeyCode LeaveCity { get; set; } = KeyCode.E;
 
-        internal KeyCode ShowMap { get; set; } = KeyCode.M;
+        internal KeyCode ShowMap { get; set; } = KeyCode.I;
+
+        internal KeyCode SectMenu { get; set; } = KeyCode.O;
+
+        internal KeyCode Roster { get; set; } = KeyCode.P;
+
+        internal KeyCode ReturnSect { get; set; } = KeyCode.B;
+
+        internal KeyCode FocusSelf { get; set; } = KeyCode.N;
+
+        internal KeyCode HorseSprint { get; set; } = KeyCode.M;
 
         internal KeyCode BattleAutoToggle { get; set; } = KeyCode.F2;
 
@@ -96,7 +106,12 @@ namespace HotkeyRemap
                 }
                 else
                 {
-                    shouldRewrite = !TryReadConfig(File.ReadAllLines(ConfigPath), config, log);
+                    shouldRewrite = !TryReadConfig(File.ReadAllLines(ConfigPath), config, log, out bool missingNewNativeHotkeys);
+                    if (missingNewNativeHotkeys && config.ShowMap == KeyCode.M)
+                    {
+                        config.ShowMap = KeyCode.I;
+                        log.Warning("检测到旧版 ShowMap=M，与新版原版马匹冲刺快捷键冲突，已迁移为 ShowMap=I。");
+                    }
                 }
             }
             catch (Exception ex)
@@ -119,7 +134,11 @@ namespace HotkeyRemap
             WriteConfig(config, log);
         }
 
-        private static bool TryReadConfig(IEnumerable<string> lines, HotkeyRemapConfig config, MelonLogger.Instance log)
+        private static bool TryReadConfig(
+            IEnumerable<string> lines,
+            HotkeyRemapConfig config,
+            MelonLogger.Instance log,
+            out bool missingNewNativeHotkeys)
         {
             bool seenEnableGlobalRemap = false;
             bool seenEnablePlotAdvanceRemap = false;
@@ -133,6 +152,11 @@ namespace HotkeyRemap
             bool seenHeroDetail = false;
             bool seenLeaveCity = false;
             bool seenShowMap = false;
+            bool seenSectMenu = false;
+            bool seenRoster = false;
+            bool seenReturnSect = false;
+            bool seenFocusSelf = false;
+            bool seenHorseSprint = false;
             bool seenBattleAutoToggle = false;
             bool seenBattleActionFastW = false;
             bool seenBattleActionFastE = false;
@@ -205,6 +229,21 @@ namespace HotkeyRemap
                     case "ShowMap":
                         isValid &= TryAssignKey(value, parsed => config.ShowMap = parsed, "ShowMap", log, ref seenShowMap);
                         break;
+                    case "SectMenu":
+                        isValid &= TryAssignKey(value, parsed => config.SectMenu = parsed, "SectMenu", log, ref seenSectMenu);
+                        break;
+                    case "Roster":
+                        isValid &= TryAssignKey(value, parsed => config.Roster = parsed, "Roster", log, ref seenRoster);
+                        break;
+                    case "ReturnSect":
+                        isValid &= TryAssignKey(value, parsed => config.ReturnSect = parsed, "ReturnSect", log, ref seenReturnSect);
+                        break;
+                    case "FocusSelf":
+                        isValid &= TryAssignKey(value, parsed => config.FocusSelf = parsed, "FocusSelf", log, ref seenFocusSelf);
+                        break;
+                    case "HorseSprint":
+                        isValid &= TryAssignKey(value, parsed => config.HorseSprint = parsed, "HorseSprint", log, ref seenHorseSprint);
+                        break;
                     case "BattleAutoToggle":
                         isValid &= TryAssignKey(value, parsed => config.BattleAutoToggle = parsed, "BattleAutoToggle", log, ref seenBattleAutoToggle);
                         break;
@@ -251,6 +290,12 @@ namespace HotkeyRemap
                 }
             }
 
+            missingNewNativeHotkeys = !seenSectMenu
+                || !seenRoster
+                || !seenReturnSect
+                || !seenFocusSelf
+                || !seenHorseSprint;
+
             return isValid
                 && seenEnableGlobalRemap
                 && seenEnablePlotAdvanceRemap
@@ -264,6 +309,11 @@ namespace HotkeyRemap
                 && seenHeroDetail
                 && seenLeaveCity
                 && seenShowMap
+                && seenSectMenu
+                && seenRoster
+                && seenReturnSect
+                && seenFocusSelf
+                && seenHorseSprint
                 && seenBattleAutoToggle
                 && seenBattleActionFastW
                 && seenBattleActionFastE
@@ -360,6 +410,11 @@ namespace HotkeyRemap
                     $"HeroDetail={config.HeroDetail}",
                     $"LeaveCity={config.LeaveCity}",
                     $"ShowMap={config.ShowMap}",
+                    $"SectMenu={config.SectMenu}",
+                    $"Roster={config.Roster}",
+                    $"ReturnSect={config.ReturnSect}",
+                    $"FocusSelf={config.FocusSelf}",
+                    $"HorseSprint={config.HorseSprint}",
                     $"BattleAutoToggle={config.BattleAutoToggle}",
                     $"BattleActionFastW={config.BattleActionFastW}",
                     $"BattleActionFastE={config.BattleActionFastE}",

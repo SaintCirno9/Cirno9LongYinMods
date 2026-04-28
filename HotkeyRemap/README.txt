@@ -11,12 +11,17 @@ HotkeyRemap
 8. `PlotAdvance`：剧情推进
 9. `HeroDetail`：主场景人物详情
 10. `LeaveCity`：离开城市 / 返回大地图
-11. `ShowMap`：显示地图
-12. `BattleAutoToggle`：战斗自动
-13. `BattleActionFastW/E/S/D/X/C`：战斗动作快捷键
-14. `StudyUp/StudyDown/StudyLeft/StudyRight`：修炼方向键
-15. `UiSubmit/UiCancel`：界面确认/取消
-16. 设置菜单内已提供 `热键设置` 入口，可在游戏内直接修改键位并保存到配置文件。
+11. `ShowMap`：地图
+12. `SectMenu`：门派
+13. `Roster`：名录
+14. `ReturnSect`：返回门派
+15. `FocusSelf`：聚焦自身
+16. `HorseSprint`：马匹冲刺
+17. `BattleAutoToggle`：战斗自动
+18. `BattleActionFastW/E/S/D/X/C`：战斗动作快捷键
+19. `StudyUp/StudyDown/StudyLeft/StudyRight`：修炼方向键
+20. `UiSubmit/UiCancel`：界面确认/取消
+21. 设置菜单内已提供 `热键设置` 入口，可在游戏内直接修改键位并保存到配置文件。
 
 安装：
 1. 确保游戏已安装 MelonLoader。
@@ -28,7 +33,8 @@ HotkeyRemap
 2. 点击设置页中的 `热键 / 设置` 入口。
 3. 在热键面板中点击右侧键位按钮。
 4. 按下新的按键后会立即写回 `UserData\HotkeyRemap.cfg`。
-5. 若要输出定位和注入细节日志，可将 `VerboseLog=true`。
+5. 点击 `重置` 会恢复所有热键默认值并写回配置文件。
+6. 若要输出定位和注入细节日志，可将 `VerboseLog=true`。
 
 配置文件：
 1. 路径：`<游戏目录>\UserData\HotkeyRemap.cfg`
@@ -48,29 +54,35 @@ HotkeyRemap
 9. `PlotAdvance=Space`
 10. `HeroDetail=Q`
 11. `LeaveCity=E`
-12. `ShowMap=M`
-13. `BattleAutoToggle=F2`
-14. `BattleActionFastW=W`
-15. `BattleActionFastE=E`
-16. `BattleActionFastS=S`
-17. `BattleActionFastD=D`
-18. `BattleActionFastX=X`
-19. `BattleActionFastC=C`
-20. `StudyUp=W`
-21. `StudyDown=S`
-22. `StudyLeft=A`
-23. `StudyRight=D`
-24. `UiSubmit=Return`
-25. `UiCancel=Escape`
+12. `ShowMap=I`
+13. `SectMenu=O`
+14. `Roster=P`
+15. `ReturnSect=B`
+16. `FocusSelf=N`
+17. `HorseSprint=M`
+18. `BattleAutoToggle=F2`
+19. `BattleActionFastW=W`
+20. `BattleActionFastE=E`
+21. `BattleActionFastS=S`
+22. `BattleActionFastD=D`
+23. `BattleActionFastX=X`
+24. `BattleActionFastC=C`
+25. `StudyUp=W`
+26. `StudyDown=S`
+27. `StudyLeft=A`
+28. `StudyRight=D`
+29. `UiSubmit=Return`
+30. `UiCancel=Escape`
 
 实现说明：
 1. `HeroDetail=Q` 时保留原版人物详情逻辑，不由 mod 接管。
 2. 只有当 `HeroDetail` 改成非 `Q` 键位时，才会由 `HudController.Update` 和原生补丁接管。
 3. `LeaveCity` 使用 `HudController.Update` 接管，并直接调用 `AreaController.ReturnBigMapButtonClicked()`，保留原版离城剧情和返回大地图逻辑。
-4. `ShowMap` 使用 `HudController.Update` 接管，并调用 `QuickTravelUIController.ShowQuickTravelUIShowType()` 显示地图界面。
+4. `ShowMap/SectMenu/Roster/ReturnSect/FocusSelf/HorseSprint` 只接入原版快捷键检测映射，不额外调用地图或其它界面逻辑。
 5. `BattleActionFastW/E/S/D/X/C` 会重写战斗动作快捷键列表。
 6. 设置菜单入口与热键面板为运行时注入，不修改原游戏资源文件。
+7. 新版原版常用快捷键包括：地图 `I`、门派 `O`、名录 `P`、返回门派 `B`、聚焦自身 `N`、马匹冲刺 `M`、确认 `Space`、取消 `Escape`。
 
 发布文件：
 1. DLL：`HotkeyRemap.dll`
-2. 压缩包：`HotkeyRemap-v1.2.0.zip`
+2. 压缩包：`HotkeyRemap-v1.3.0.zip`
