@@ -82,103 +82,128 @@ namespace DualCultivation
             BackPic = _category.CreateEntry("BackPic", DefaultBackPic, description: "确认和完成对话使用的背景图，留空则不指定背景");
             VerboseLog = _category.CreateEntry("VerboseLog", DefaultVerboseLog, description: "是否输出详细日志");
 
-            Normalize();
-            Save();
+            if (Normalize())
+            {
+                Save();
+            }
         }
 
-        private static void Normalize()
+        private static bool Normalize()
         {
+            bool changed = false;
+
             if (RequiredFavor.Value < 0)
             {
                 RequiredFavor.Value = DefaultRequiredFavor;
+                changed = true;
             }
 
             if (RelationRequirement.Value < 0 || RelationRequirement.Value > 2)
             {
                 RelationRequirement.Value = DefaultRelationRequirement;
+                changed = true;
             }
 
             if (MonthlyLimit.Value < 1)
             {
                 MonthlyLimit.Value = DefaultMonthlyLimit;
+                changed = true;
             }
 
             if (WorkDays.Value < 1)
             {
                 WorkDays.Value = DefaultWorkDays;
+                changed = true;
             }
 
             if (RewardRate.Value <= 0f)
             {
                 RewardRate.Value = DefaultRewardRate;
+                changed = true;
             }
 
             if (MaxHpGain.Value < 1)
             {
                 MaxHpGain.Value = DefaultMaxHpGain;
+                changed = true;
             }
 
             if (MaxManaGain.Value < 1)
             {
                 MaxManaGain.Value = DefaultMaxManaGain;
+                changed = true;
             }
 
             if (FavorGain.Value < 0)
             {
                 FavorGain.Value = DefaultFavorGain;
+                changed = true;
             }
 
             if (string.IsNullOrWhiteSpace(PromptText.Value))
             {
                 PromptText.Value = DefaultPromptText;
+                changed = true;
             }
             else if (PromptText.Value == OldDefaultPromptText)
             {
                 PromptText.Value = DefaultPromptText;
+                changed = true;
             }
 
             if (string.IsNullOrWhiteSpace(RewardPreviewText.Value))
             {
                 RewardPreviewText.Value = DefaultRewardPreviewText;
+                changed = true;
             }
 
             if (string.IsNullOrWhiteSpace(StartChoiceText.Value))
             {
                 StartChoiceText.Value = DefaultStartChoiceText;
+                changed = true;
             }
             else if (StartChoiceText.Value == OldDefaultStartChoiceText)
             {
                 StartChoiceText.Value = DefaultStartChoiceText;
+                changed = true;
             }
 
             if (string.IsNullOrWhiteSpace(ConfirmChoiceText.Value))
             {
                 ConfirmChoiceText.Value = DefaultConfirmChoiceText;
+                changed = true;
             }
 
             if (string.IsNullOrWhiteSpace(CancelChoiceText.Value))
             {
                 CancelChoiceText.Value = DefaultCancelChoiceText;
+                changed = true;
             }
 
             if (string.IsNullOrWhiteSpace(ResultText.Value))
             {
                 ResultText.Value = DefaultResultText;
+                changed = true;
             }
             else if (ResultText.Value == OldDefaultResultText)
             {
                 ResultText.Value = DefaultResultText;
+                changed = true;
             }
 
             if (string.IsNullOrWhiteSpace(ResultChoiceText.Value))
             {
                 ResultChoiceText.Value = DefaultResultChoiceText;
+                changed = true;
             }
 
             if (BackPic.Value == null)
             {
                 BackPic.Value = DefaultBackPic;
+                changed = true;
             }
+
+            return changed;
         }
 
         internal static void Save()
@@ -188,7 +213,14 @@ namespace DualCultivation
                 return;
             }
 
-            _category.SaveToFile();
+            try
+            {
+                _category.SaveToFile();
+            }
+            catch (System.Exception ex)
+            {
+                Main.Log.Warning($"保存配置文件失败：{ex.Message}");
+            }
         }
     }
 }

@@ -5,7 +5,7 @@ using MelonLoader;
 using System;
 using UnityEngine.UI;
 
-[assembly: MelonInfo(typeof(DualCultivation.Main), "DualCultivation", "1.1.1", "SaintCirno9", null)]
+[assembly: MelonInfo(typeof(DualCultivation.Main), "DualCultivation", "1.1.2", "SaintCirno9", null)]
 [assembly: MelonGame("TppStudio", "LongYinLiZhiZhuan")]
 
 namespace DualCultivation
