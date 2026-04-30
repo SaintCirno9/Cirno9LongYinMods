@@ -5,7 +5,7 @@ using MelonLoader;
 using System;
 using UnityEngine.UI;
 
-[assembly: MelonInfo(typeof(DualCultivation.Main), "DualCultivation", "1.1.2", "SaintCirno9", null)]
+[assembly: MelonInfo(typeof(DualCultivation.Main), "DualCultivation", "1.2.0", "SaintCirno9", null)]
 [assembly: MelonGame("TppStudio", "LongYinLiZhiZhuan")]
 
 namespace DualCultivation
@@ -37,6 +37,7 @@ namespace DualCultivation
         private const string WorkName = "双修";
         private const string MonthlyCooldownText = "（本月已双修）";
         private const string AvailableHintText = "与对方双修一日，提升双方生命与内力上限";
+        private const int BaseAttriCount = 6;
 
         private static PendingSession? _pendingSession;
         private static SinglePlotData _returnPlot;
@@ -213,6 +214,8 @@ namespace DualCultivation
             player.ChangeMaxMana(session.PlayerManaGain, true);
             target.ChangeMaxHp(session.TargetHpGain, true);
             target.ChangeMaxMana(session.TargetManaGain, true);
+            ApplyRandomAttriGain(player);
+            ApplyRandomAttriGain(target);
             PlotController.Instance?.PlotChangeHeroFavor(target, DualCultivationConfig.FavorGain.Value, 100f, 0f, true);
 
             ShowResultPlot(target);
@@ -466,6 +469,19 @@ namespace DualCultivation
                 Math.Min(target.realMaxMana * rate, DualCultivationConfig.MaxManaGain.Value),
                 Math.Min(player.realMaxHp * rate, DualCultivationConfig.MaxHpGain.Value),
                 Math.Min(player.realMaxMana * rate, DualCultivationConfig.MaxManaGain.Value));
+        }
+
+        private static void ApplyRandomAttriGain(HeroData hero)
+        {
+            if (!DualCultivationConfig.EnableRandomAttriGain.Value || hero == null)
+            {
+                return;
+            }
+
+            int attriId = Random.Next(BaseAttriCount);
+            int gain = DualCultivationConfig.RandomAttriGain.Value;
+            hero.ChangeMaxAttri(attriId, gain, true);
+            hero.ChangeAttri(attriId, gain, true);
         }
 
         private static string FormatText(string text, HeroData player, HeroData target, RewardPreview preview)

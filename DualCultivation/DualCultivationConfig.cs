@@ -14,6 +14,8 @@ namespace DualCultivation
         private const int DefaultMaxHpGain = 50;
         private const int DefaultMaxManaGain = 100;
         private const int DefaultFavorGain = 10;
+        private const bool DefaultEnableRandomAttriGain = false;
+        private const int DefaultRandomAttriGain = 1;
         private const string OldDefaultPromptText = "称呼想和我双修吗？";
         private const string OldDefaultResultText = "此番双修我获益匪浅，不知称呼收获如何？";
         private const string OldDefaultStartChoiceText = "开始双修";
@@ -41,6 +43,8 @@ namespace DualCultivation
         internal static MelonPreferences_Entry<int> MaxHpGain { get; private set; } = null!;
         internal static MelonPreferences_Entry<int> MaxManaGain { get; private set; } = null!;
         internal static MelonPreferences_Entry<int> FavorGain { get; private set; } = null!;
+        internal static MelonPreferences_Entry<bool> EnableRandomAttriGain { get; private set; } = null!;
+        internal static MelonPreferences_Entry<int> RandomAttriGain { get; private set; } = null!;
         internal static MelonPreferences_Entry<string> PromptText { get; private set; } = null!;
         internal static MelonPreferences_Entry<string> RewardPreviewText { get; private set; } = null!;
         internal static MelonPreferences_Entry<string> StartChoiceText { get; private set; } = null!;
@@ -72,6 +76,8 @@ namespace DualCultivation
             MaxHpGain = _category.CreateEntry("MaxHpGain", DefaultMaxHpGain, description: "单次最多获得的生命上限");
             MaxManaGain = _category.CreateEntry("MaxManaGain", DefaultMaxManaGain, description: "单次最多获得的内力上限");
             FavorGain = _category.CreateEntry("FavorGain", DefaultFavorGain, description: "完成后增加的对方好感");
+            EnableRandomAttriGain = _category.CreateEntry("EnableRandomAttriGain", DefaultEnableRandomAttriGain, description: "完成后是否随机增加双方六维属性和对应潜力");
+            RandomAttriGain = _category.CreateEntry("RandomAttriGain", DefaultRandomAttriGain, description: "随机六维属性和对应潜力的增加点数");
             PromptText = _category.CreateEntry("PromptText", DefaultPromptText, description: "确认对话文本");
             RewardPreviewText = _category.CreateEntry("RewardPreviewText", DefaultRewardPreviewText, description: "收益预览文本");
             StartChoiceText = _category.CreateEntry("StartChoiceText", DefaultStartChoiceText, description: "修行菜单入口选项文本");
@@ -137,6 +143,12 @@ namespace DualCultivation
             if (FavorGain.Value < 0)
             {
                 FavorGain.Value = DefaultFavorGain;
+                changed = true;
+            }
+
+            if (RandomAttriGain.Value < 1)
+            {
+                RandomAttriGain.Value = DefaultRandomAttriGain;
                 changed = true;
             }
 

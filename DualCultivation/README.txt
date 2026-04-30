@@ -4,6 +4,7 @@ DualCultivation
 - 在 NPC 对话的“修行”分支追加“双修”选项。
 - 默认要求对方好感达到 100，且对方是当前伴侣。
 - 双修默认耗时 1 天，不可取消；完成后双方按对方生命、内力上限获得上限提升，并提升对方好感 10 点。
+- 可选开启完成后双方随机增加一项六维属性和对应潜力。
 
 安装：
 1. 确保游戏已安装 MelonLoader。
@@ -23,6 +24,8 @@ DualCultivation
 - `MaxHpGain=50`：单次最多获得的生命上限；小于 1 时回退默认值。
 - `MaxManaGain=100`：单次最多获得的内力上限；小于 1 时回退默认值。
 - `FavorGain=10`：完成后增加的对方好感；小于 0 时回退默认值。
+- `EnableRandomAttriGain=false`：完成后是否随机增加双方六维属性和对应潜力。
+- `RandomAttriGain=1`：随机六维属性和对应潜力的增加点数；小于 1 时回退默认值。
 - `PromptText={称呼}可愿与我共参阴阳、同调内息？|今日气息圆融，{称呼}可愿与我同修一日？|我近日修行略有所悟，想与{称呼}互证一番。|若{称呼}得闲，不妨与我闭关同修。|你我内息相近，今日同修或许会有所进境。`：确认对话文本。可用 `|` 分隔多条文本，确认时随机显示其中一条。
 - `RewardPreviewText=可获得{HpGain}点生命上限和{ManaGain}点内力上限，对方可获得{TargetHpGain}点生命上限和{TargetManaGain}点内力上限。`：收益预览文本。
 - `StartChoiceText=双修`：修行菜单入口选项文本。
@@ -40,4 +43,4 @@ DualCultivation
 
 发布文件：
 1. DLL：`DualCultivation.dll`
-2. 压缩包：`DualCultivation-v1.1.2.zip`
+2. 压缩包：`DualCultivation-v1.2.0.zip`
