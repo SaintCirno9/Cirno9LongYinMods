@@ -3,7 +3,7 @@ using HarmonyLib;
 using Il2Cpp;
 using System;
 
-[assembly: MelonInfo(typeof(HotkeyRemap.Main), "HotkeyRemap", "1.3.0", "SaintCirno9", null)]
+[assembly: MelonInfo(typeof(HotkeyRemap.Main), "HotkeyRemap", "1.3.1", "SaintCirno9", null)]
 [assembly: MelonGame("TppStudio", "LongYinLiZhiZhuan")]
 
 namespace HotkeyRemap
@@ -18,7 +18,6 @@ namespace HotkeyRemap
         {
             Config = HotkeyRemapConfigStore.Load(Log);
             BattleHotkeyListHelper.TryApplyConfiguredLists();
-            HudHeroDetailNativePatch.TryInstall(Log);
             LogSettingMenuPatchTarget();
 
             Log.Msg($"HotkeyRemap 已加载。配置文件：{HotkeyRemapConfigStore.ConfigPathDisplay}");
@@ -29,11 +28,6 @@ namespace HotkeyRemap
         public override void OnUpdate()
         {
             HotkeySettingsMenuUi.HandleInput();
-        }
-
-        public override void OnDeinitializeMelon()
-        {
-            HudHeroDetailNativePatch.TryRestore(Log);
         }
 
         private static void LogSettingMenuPatchTarget()

@@ -75,8 +75,8 @@ HotkeyRemap
 30. `UiCancel=Escape`
 
 实现说明：
-1. `HeroDetail=Q` 时保留原版人物详情逻辑，不由 mod 接管。
-2. 只有当 `HeroDetail` 改成非 `Q` 键位时，才会由 `HudController.Update` 和原生补丁接管。
+1. `HeroDetail` 通过原版 `HudController.Update` 里的 `GlobalData.GetKeyDown(Q)` 映射接管，不再使用原生补丁。
+2. `HeroDetail=Q` 时等同原版人物详情逻辑。
 3. `LeaveCity` 使用 `HudController.Update` 接管，并直接调用 `AreaController.ReturnBigMapButtonClicked()`，保留原版离城剧情和返回大地图逻辑。
 4. `ShowMap/SectMenu/Roster/ReturnSect/FocusSelf/HorseSprint` 只接入原版快捷键检测映射，不额外调用地图或其它界面逻辑。
 5. `BattleActionFastW/E/S/D/X/C` 会重写战斗动作快捷键列表。
@@ -85,4 +85,4 @@ HotkeyRemap
 
 发布文件：
 1. DLL：`HotkeyRemap.dll`
-2. 压缩包：`HotkeyRemap-v1.3.0.zip`
+2. 压缩包：`HotkeyRemap-v1.3.1.zip`

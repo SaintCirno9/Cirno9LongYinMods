@@ -318,7 +318,6 @@ namespace HotkeyRemap
             }
 
             _pendingBinding.Setter(key);
-            SyncRuntimeHotkeyState();
             HotkeyRemapConfigStore.Save(Main.Config, Main.Log);
             BattleHotkeyListHelper.TryApplyConfiguredLists();
 
@@ -368,7 +367,6 @@ namespace HotkeyRemap
             Main.Config.UiCancel = defaultConfig.UiCancel;
 
             _pendingBinding = null;
-            SyncRuntimeHotkeyState();
             HotkeyRemapConfigStore.Save(Main.Config, Main.Log);
             BattleHotkeyListHelper.TryApplyConfiguredLists();
 
@@ -378,17 +376,6 @@ namespace HotkeyRemap
             }
 
             RefreshAll();
-        }
-
-        private static void SyncRuntimeHotkeyState()
-        {
-            if (Main.Config.HeroDetail == KeyCode.Q)
-            {
-                HudHeroDetailNativePatch.TryRestore(Main.Log);
-                return;
-            }
-
-            HudHeroDetailNativePatch.TryInstall(Main.Log);
         }
 
         private static void RefreshAll()

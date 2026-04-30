@@ -31,6 +31,9 @@ namespace HotkeyRemap
                 case KeyCode.Space:
                     mapped = config.BigMapRest;
                     return true;
+                case KeyCode.Q:
+                    mapped = config.HeroDetail;
+                    return true;
                 case KeyCode.I:
                     mapped = config.ShowMap;
                     return true;
@@ -79,98 +82,14 @@ namespace HotkeyRemap
                 && Main.Config.PlotAdvance != KeyCode.Space;
         }
 
-        internal static void TryHandleHudHotkeys(HudController controller)
+        internal static void TryHandleHudHotkeys()
         {
-            if (!Main.Config.EnableGlobalRemap || controller == null)
+            if (!Main.Config.EnableGlobalRemap)
             {
                 return;
             }
 
-            TryHandleHudHeroDetailHotkey(controller);
             TryHandleLeaveCityHotkey();
-        }
-
-        private static void TryHandleHudHeroDetailHotkey(HudController controller)
-        {
-            KeyCode mappedKey = Main.Config.HeroDetail;
-            if (mappedKey == KeyCode.Q || !Input.GetKeyDown(mappedKey))
-            {
-                return;
-            }
-
-            if (Main.Config.VerboseLog)
-            {
-                Main.Log.Msg($"检测到人物详情热键：{mappedKey}。");
-            }
-
-            GameObject heroFace = controller.heroFace;
-            if (heroFace == null)
-            {
-                if (Main.Config.VerboseLog)
-                {
-                    Main.Log.Warning("人物头像对象为空，无法处理人物详情热键。");
-                }
-
-                return;
-            }
-
-            HeroDetailController heroDetailController = HeroDetailController.Instance;
-            if (heroDetailController?.heroDetailPanel != null && heroDetailController.heroDetailPanel.activeSelf)
-            {
-                if (TradeUIController.Instance?.tradeUI != null && TradeUIController.Instance.tradeUI.activeSelf)
-                {
-                    return;
-                }
-
-                if (ItemUseMenuController.Instance?.itemUseMenuPanel != null && ItemUseMenuController.Instance.itemUseMenuPanel.activeSelf)
-                {
-                    return;
-                }
-
-                if (Main.Config.VerboseLog)
-                {
-                    Main.Log.Msg("人物详情热键将关闭当前人物详情。");
-                }
-
-                heroDetailController.UnshowHeroDetail();
-                return;
-            }
-
-            if (!heroFace.activeInHierarchy)
-            {
-                return;
-            }
-
-            GameController gameController = GameController.Instance;
-            if (gameController == null || gameController.HaveSpeUI(true))
-            {
-                return;
-            }
-
-            ShowHeroDetail showHeroDetail = heroFace.GetComponent<ShowHeroDetail>();
-            if (showHeroDetail == null)
-            {
-                if (Main.Config.VerboseLog)
-                {
-                    Main.Log.Warning("人物头像上未找到 ShowHeroDetail 组件。");
-                }
-
-                return;
-            }
-
-            try
-            {
-                if (Main.Config.VerboseLog)
-                {
-                    Main.Log.Msg("人物详情热键将打开主角详情。");
-                }
-
-                showHeroDetail.OnClick();
-            }
-            catch (System.Exception ex)
-            {
-                Main.Log.Warning($"人物详情热键执行失败，已忽略本次输入：{ex.Message}");
-            }
         }
 
         private static void TryHandleLeaveCityHotkey()
@@ -367,9 +286,9 @@ namespace HotkeyRemap
     internal static class HudControllerUpdateHeroDetailHotkeyPatch
     {
         [HarmonyPostfix]
-        private static void Postfix(HudController __instance)
+        private static void Postfix()
         {
-            HotkeyRemapService.TryHandleHudHotkeys(__instance);
+            HotkeyRemapService.TryHandleHudHotkeys();
         }
     }
 }
