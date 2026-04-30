@@ -1,10 +1,16 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using System.Runtime.InteropServices;
+using System.Security.Cryptography;
+using System.Text;
 using HarmonyLib;
 using Il2Cpp;
+using Il2CppInterop.Runtime.InteropTypes.Arrays;
 using MelonLoader;
+using MelonLoader.NativeUtils;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -13,54 +19,90 @@ using UnityEngine.UI;
 
 namespace LongYinFontReplacement
 {
-    internal enum FontSourceKind
-    {
-        Bundle,
-        Os
-    }
-
     internal sealed class FontReplacementRule
     {
-        public FontReplacementRule(string originalFontName, FontSourceKind sourceKind, string sourcePath, string assetName, float lineSpacingScale)
+        public FontReplacementRule(string originalFontName, string sourcePath, string assetName, float lineSpacingScale, float fontSizeScale)
         {
             OriginalFontName = originalFontName;
-            SourceKind = sourceKind;
             SourcePath = sourcePath;
             AssetName = assetName;
             LineSpacingScale = lineSpacingScale;
+            FontSizeScale = fontSizeScale;
         }
 
         public string OriginalFontName { get; }
-
-        public FontSourceKind SourceKind { get; }
 
         public string SourcePath { get; }
 
         public string AssetName { get; }
 
         public float LineSpacingScale { get; }
+
+        public float FontSizeScale { get; }
+    }
+
+    internal sealed class NativeFontMemory
+    {
+        public NativeFontMemory(IntPtr buffer, int size, string sourcePath, string hash, string[] familyNames)
+        {
+            Buffer = buffer;
+            Size = size;
+            SourcePath = sourcePath;
+            Hash = hash;
+            FamilyNames = familyNames;
+        }
+
+        public IntPtr Buffer { get; }
+
+        public int Size { get; }
+
+        public string SourcePath { get; }
+
+        public string Hash { get; }
+
+        public string[] FamilyNames { get; }
+
+        public int InjectionCount { get; set; }
     }
 
     public class Main : MelonMod
     {
-        private const float DefaultLineSpacingScale = 0.8f;
+        private const float DefaultLineSpacingScale = 1.0f;
+        private const long FontLoadDynamicFaceRva = 0xC69560;
 
         internal static readonly string ConfigDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "UserData", "LongYinFontReplacement");
-        internal static readonly string BundleDir = Path.Combine(ConfigDir, "Bundles");
+        internal static readonly string FontDir = Path.Combine(ConfigDir, "Fonts");
         internal static readonly string ConfigPath = Path.Combine(ConfigDir, "FontMappings.txt");
 
-        internal static readonly Dictionary<string, FontReplacementRule> ReplacementRules = new(StringComparer.OrdinalIgnoreCase);
+        internal static FontReplacementRule DefaultRule;
+        internal static readonly Dictionary<string, FontReplacementRule> OverrideRules = new(StringComparer.OrdinalIgnoreCase);
         internal static readonly Dictionary<string, Font> CachedFonts = new(StringComparer.OrdinalIgnoreCase);
-        internal static readonly Dictionary<string, AssetBundle> CachedBundles = new(StringComparer.OrdinalIgnoreCase);
+        internal static readonly Dictionary<string, NativeFontMemory> CachedNativeFontMemories = new(StringComparer.OrdinalIgnoreCase);
+        internal static readonly Dictionary<string, string[]> CachedFontNameLists = new(StringComparer.OrdinalIgnoreCase);
+        internal static readonly HashSet<int> CachedFontInstanceIds = new();
+        internal static readonly List<Font> PreservedRuntimeFonts = new();
+        internal static readonly List<NativeFontMemory> PreservedNativeFontMemories = new();
         internal static readonly Dictionary<int, float> OriginalLineSpacings = new();
+        internal static readonly Dictionary<int, int> OriginalFontSizes = new();
         internal static readonly HashSet<string> WarnedMessages = new(StringComparer.OrdinalIgnoreCase);
 
         public static readonly MelonLogger.Instance LOG = Melon<Main>.Logger;
+
+        private static NativeHook<FontLoadDynamicFaceDelegate> FontLoadDynamicFaceHook;
+        private static FontLoadDynamicFaceDelegate FontLoadDynamicFaceDetourDelegate;
+        private static string ActiveDelayedScanKey;
+
+        [ThreadStatic]
+        private static NativeFontMemory PendingNativeFontMemory;
+
+        [ThreadStatic]
+        private static bool ApplyingTextFont;
 
         public override void OnInitializeMelon()
         {
             EnsureConfigExists();
             ReloadConfig();
+            InstallNativeFontMemoryHook();
             HarmonyInstance.PatchAll();
             LOG.Msg($"LongYinFontReplacement 已加载，配置目录：{ConfigDir}");
         }
@@ -68,12 +110,13 @@ namespace LongYinFontReplacement
         public override void OnSceneWasInitialized(int buildIndex, string sceneName)
         {
             TryApplyToAllLoadedTexts($"场景初始化：{sceneName}");
+            StartDelayedSceneScans(sceneName);
         }
 
         internal static void EnsureConfigExists()
         {
             Directory.CreateDirectory(ConfigDir);
-            Directory.CreateDirectory(BundleDir);
+            Directory.CreateDirectory(FontDir);
 
             if (File.Exists(ConfigPath))
             {
@@ -82,26 +125,28 @@ namespace LongYinFontReplacement
 
             string sampleConfig =
                 "# 字体替换配置，编码请保持 UTF-8\r\n" +
-                "# 每行格式：原字体名|资源类型|参数1|参数2|行距倍率\r\n" +
-                "# 资源类型：os 或 bundle\r\n" +
-                "# os：参数1=系统字体名称，参数2留空\r\n" +
-                "# bundle：参数1=相对 UserData\\LongYinFontReplacement 的 AssetBundle 路径，参数2=Bundle 内的 Font 资源名\r\n" +
+                "# 全局通用字体：default|字体文件路径|字体族名|行距倍率|字号倍率\r\n" +
+                "# 特定字体覆盖：override|原字体名|字体文件路径|字体族名|行距倍率|字号倍率\r\n" +
+                "# 字体文件路径相对 UserData\\LongYinFontReplacement，字体族名可留空自动读取。\r\n" +
+                "# 行距倍率会乘到原组件行距上：1.00=保持原版，1.20=加大 20%，0.80=压缩 20%。原版不同 UI 可能本来就是 1、0.9、0.8 或 0.75。\r\n" +
+                "# 字号倍率会乘到原组件字号上：1.00=保持原版，0.85=缩小 15%。笔画外扩或字面偏大的字体建议 0.80-0.90。\r\n" +
                 "# 当前版本先接管 LTLocalization 的 UnityEngine.UI.Text 链路。\r\n" +
-                "汇文明朝体|os|Microsoft YaHei||0.80\r\n" +
-                "SourceHanSansCN-Regular|os|Microsoft YaHei||0.80\r\n" +
-                "SourceHanSansCN-Bold|os|Microsoft YaHei||0.80\r\n" +
-                "SourceHanSerifCN-Medium|os|SimSun||0.80\r\n" +
-                "SourceHanSerifCN-Bold|os|SimSun||0.80\r\n" +
-                "字体家AI造字剑客|os|SimHei||0.80\r\n" +
-                "字体家AI造字霸行|os|SimHei||0.80\r\n";
+                "default|Fonts\\庞门正道细线体.ttf||1.00|1.00\r\n" +
+                "# override|字体家AI造字剑客|Fonts\\庞门正道细线体.ttf||1.00|1.00\r\n" +
+                "# override|SourceHanSerifCN-Bold|Fonts\\庞门正道细线体.ttf||1.00|1.00\r\n" +
+                "# override|LiberationSans|Fonts\\庞门正道细线体.ttf||1.00|1.00\r\n";
 
             File.WriteAllText(ConfigPath, sampleConfig);
         }
 
         internal static void ReloadConfig()
         {
-            ReplacementRules.Clear();
+            DefaultRule = null;
+            OverrideRules.Clear();
             CachedFonts.Clear();
+            CachedNativeFontMemories.Clear();
+            CachedFontNameLists.Clear();
+            CachedFontInstanceIds.Clear();
             WarnedMessages.Clear();
 
             if (!File.Exists(ConfigPath))
@@ -110,7 +155,7 @@ namespace LongYinFontReplacement
                 return;
             }
 
-            int loadedCount = 0;
+            int overrideCount = 0;
             foreach (string rawLine in File.ReadAllLines(ConfigPath))
             {
                 string line = rawLine.Trim();
@@ -120,29 +165,39 @@ namespace LongYinFontReplacement
                 }
 
                 string[] parts = line.Split('|');
-                if (parts.Length < 5)
+
+                string ruleType = parts[0].Trim();
+                bool isDefaultRule = string.Equals(ruleType, "default", StringComparison.OrdinalIgnoreCase);
+                bool isOverrideRule = string.Equals(ruleType, "override", StringComparison.OrdinalIgnoreCase);
+                if (!isDefaultRule && !isOverrideRule)
                 {
-                    WarnOnce($"配置行格式不正确：{line}");
+                    WarnOnce($"未知的配置规则类型：{ruleType}");
                     continue;
                 }
 
-                string originalFontName = NormalizeFontName(parts[0]);
-                string sourceKindText = parts[1].Trim();
-                string sourcePath = parts[2].Trim();
-                string assetName = parts[3].Trim();
-                string lineSpacingText = parts[4].Trim();
+                if (isDefaultRule && parts.Length != 5)
+                {
+                    WarnOnce($"全局字体配置行格式不正确：{line}");
+                    continue;
+                }
 
-                if (string.IsNullOrWhiteSpace(originalFontName) ||
-                    string.IsNullOrWhiteSpace(sourceKindText) ||
+                if (isOverrideRule && parts.Length != 6)
+                {
+                    WarnOnce($"特定字体覆盖配置行格式不正确：{line}");
+                    continue;
+                }
+
+                string originalFontName = isDefaultRule ? "default" : NormalizeFontName(parts[1]);
+                int sourcePathIndex = isDefaultRule ? 1 : 2;
+                string sourcePath = parts[sourcePathIndex].Trim();
+                string assetName = parts[sourcePathIndex + 1].Trim();
+                string lineSpacingText = parts[sourcePathIndex + 2].Trim();
+                string fontSizeText = parts[sourcePathIndex + 3].Trim();
+
+                if ((isOverrideRule && string.IsNullOrWhiteSpace(originalFontName)) ||
                     string.IsNullOrWhiteSpace(sourcePath))
                 {
                     WarnOnce($"配置行缺少必要字段：{line}");
-                    continue;
-                }
-
-                if (!TryParseSourceKind(sourceKindText, out FontSourceKind sourceKind))
-                {
-                    WarnOnce($"未知的字体来源类型：{sourceKindText}");
                     continue;
                 }
 
@@ -151,20 +206,39 @@ namespace LongYinFontReplacement
                     lineSpacingScale = DefaultLineSpacingScale;
                 }
 
-                ReplacementRules[originalFontName] = new FontReplacementRule(
+                if (!float.TryParse(fontSizeText, NumberStyles.Float, CultureInfo.InvariantCulture, out float fontSizeScale))
+                {
+                    fontSizeScale = 1.0f;
+                }
+
+                FontReplacementRule rule = new FontReplacementRule(
                     originalFontName,
-                    sourceKind,
                     sourcePath,
                     assetName,
-                    lineSpacingScale);
-                loadedCount++;
+                    lineSpacingScale,
+                    fontSizeScale);
+
+                if (isDefaultRule)
+                {
+                    DefaultRule = rule;
+                }
+                else
+                {
+                    OverrideRules[originalFontName] = rule;
+                    overrideCount++;
+                }
             }
 
-            LOG.Msg($"已加载 {loadedCount} 条字体替换规则。");
+            LOG.Msg($"已加载字体替换配置：全局通用字体={(DefaultRule == null ? "无" : "有")}，特定覆盖 {overrideCount} 条。");
         }
 
-        internal static bool TryApplyToText(Text targetText, string source)
+        internal static bool TryApplyToText(Text targetText)
         {
+            if (ApplyingTextFont)
+            {
+                return false;
+            }
+
             if (targetText == null)
             {
                 return false;
@@ -178,18 +252,73 @@ namespace LongYinFontReplacement
             Font currentFont = targetText.font;
             if (currentFont == null)
             {
-                return false;
+                return ApplyDefaultFontToText(targetText);
             }
 
-            if (!TryGetRule(currentFont.name, out FontReplacementRule rule))
+            if (IsCurrentFontAlreadyReplacement(currentFont))
+            {
+                return ApplyDefaultStyleToText(targetText, currentFont);
+            }
+
+            if (!TryResolveRule(currentFont.name, out FontReplacementRule rule))
             {
                 return false;
             }
 
-            Font replacementFont = ResolveFont(rule);
-            if (replacementFont == null)
+            try
             {
-                WarnOnce($"无法加载替换字体：{rule.OriginalFontName}");
+                ApplyingTextFont = true;
+
+                Font replacementFont = ResolveFont(rule);
+                if (replacementFont == null)
+                {
+                    WarnOnce($"无法加载替换字体：{rule.OriginalFontName}，当前字体={GetUnityFontName(currentFont)}，文件={Path.GetFullPath(Path.Combine(ConfigDir, rule.SourcePath))}");
+                    return false;
+                }
+
+                if (!CanRenderText(replacementFont, targetText.text, targetText.fontSize, targetText.fontStyle, rule))
+                {
+                    return false;
+                }
+
+                int textId = targetText.GetInstanceID();
+                if (!OriginalLineSpacings.ContainsKey(textId))
+                {
+                    OriginalLineSpacings[textId] = targetText.lineSpacing;
+                }
+
+                if (!OriginalFontSizes.ContainsKey(textId))
+                {
+                    OriginalFontSizes[textId] = targetText.fontSize;
+                }
+
+                if (targetText.font != replacementFont)
+                {
+                    targetText.font = replacementFont;
+                }
+
+                targetText.lineSpacing = OriginalLineSpacings[textId] * rule.LineSpacingScale;
+                targetText.fontSize = Math.Max(1, (int)Math.Round(OriginalFontSizes[textId] * rule.FontSizeScale));
+                targetText.SetAllDirty();
+                return true;
+            }
+            finally
+            {
+                ApplyingTextFont = false;
+            }
+        }
+
+        private static bool ApplyDefaultFontToText(Text targetText)
+        {
+            if (DefaultRule == null)
+            {
+                return false;
+            }
+
+            Font replacementFont = ResolveFont(DefaultRule);
+            if (replacementFont == null ||
+                !CanRenderText(replacementFont, targetText.text, targetText.fontSize, targetText.fontStyle, DefaultRule))
+            {
                 return false;
             }
 
@@ -199,13 +328,121 @@ namespace LongYinFontReplacement
                 OriginalLineSpacings[textId] = targetText.lineSpacing;
             }
 
-            if (targetText.font != replacementFont)
+            if (!OriginalFontSizes.ContainsKey(textId))
             {
-                targetText.font = replacementFont;
+                OriginalFontSizes[textId] = targetText.fontSize;
             }
 
-            targetText.lineSpacing = OriginalLineSpacings[textId] * rule.LineSpacingScale;
+            targetText.font = replacementFont;
+            targetText.lineSpacing = OriginalLineSpacings[textId] * DefaultRule.LineSpacingScale;
+            targetText.fontSize = Math.Max(1, (int)Math.Round(OriginalFontSizes[textId] * DefaultRule.FontSizeScale));
+            targetText.SetAllDirty();
             return true;
+        }
+
+        private static bool ApplyDefaultStyleToText(Text targetText, Font replacementFont)
+        {
+            if (DefaultRule == null)
+            {
+                return false;
+            }
+
+            int textId = targetText.GetInstanceID();
+            if (!OriginalLineSpacings.ContainsKey(textId))
+            {
+                OriginalLineSpacings[textId] = targetText.lineSpacing;
+            }
+
+            if (!OriginalFontSizes.ContainsKey(textId))
+            {
+                OriginalFontSizes[textId] = targetText.fontSize;
+            }
+
+            int targetFontSize = Math.Max(1, (int)Math.Round(OriginalFontSizes[textId] * DefaultRule.FontSizeScale));
+            float targetLineSpacing = OriginalLineSpacings[textId] * DefaultRule.LineSpacingScale;
+            if (targetText.fontSize == targetFontSize &&
+                Math.Abs(targetText.lineSpacing - targetLineSpacing) < 0.001f)
+            {
+                return false;
+            }
+
+            targetText.font = replacementFont;
+            targetText.lineSpacing = targetLineSpacing;
+            targetText.fontSize = targetFontSize;
+            targetText.SetAllDirty();
+            return true;
+        }
+
+        private static bool IsCurrentFontAlreadyReplacement(Font font)
+        {
+            foreach (Font cachedFont in CachedFonts.Values)
+            {
+                if (ReferenceEquals(cachedFont, font))
+                {
+                    return true;
+                }
+            }
+
+            try
+            {
+                int fontInstanceId = font.GetInstanceID();
+                if (!CachedFontInstanceIds.Contains(fontInstanceId))
+                {
+                    return false;
+                }
+
+                if (CanGenerateProbeGlyph(font))
+                {
+                    return true;
+                }
+
+                CachedFontInstanceIds.Remove(fontInstanceId);
+                return false;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private static bool CanRenderText(Font font, string text, int fontSize, FontStyle fontStyle, FontReplacementRule rule)
+        {
+            try
+            {
+                string visibleText = StripRichTextTags(text);
+                font.RequestCharactersInTexture(visibleText, fontSize, fontStyle);
+
+                foreach (char character in visibleText)
+                {
+                    if (char.IsWhiteSpace(character) || char.IsControl(character))
+                    {
+                        continue;
+                    }
+
+                    if (!font.HasCharacter(character))
+                    {
+                        string originalFontName = rule != null ? rule.OriginalFontName : font.name;
+                        WarnOnce($"替换字体缺少字符“{character}”，跳过包含该字符的文本：{originalFontName}");
+                        return false;
+                    }
+
+                    CharacterInfo characterInfo;
+                    if (!font.GetCharacterInfo(character, out characterInfo, fontSize, fontStyle))
+                    {
+                        string originalFontName = rule != null ? rule.OriginalFontName : font.name;
+                        WarnOnce($"替换字体无法生成字符“{character}”的字形，跳过包含该字符的文本：{originalFontName}");
+                        return false;
+                    }
+                }
+
+                return true;
+            }
+            catch (Exception ex)
+            {
+                string originalFontName = rule != null ? rule.OriginalFontName : font.name;
+                WarnOnce($"检查字体字符失败：{originalFontName}，{ex.Message}");
+                return false;
+            }
         }
 
         internal static void TryApplyToAllLoadedTexts(string source)
@@ -216,7 +453,7 @@ namespace LongYinFontReplacement
                 Text[] texts = Resources.FindObjectsOfTypeAll<Text>();
                 foreach (Text targetText in texts)
                 {
-                    if (TryApplyToText(targetText, source))
+                    if (TryApplyToText(targetText))
                     {
                         replacedCount++;
                     }
@@ -233,100 +470,528 @@ namespace LongYinFontReplacement
             }
         }
 
-        private static bool TryGetRule(string currentFontName, out FontReplacementRule rule)
+        internal static void StartDelayedSceneScans(string sceneName)
+        {
+            if (string.Equals(ActiveDelayedScanKey, sceneName, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            ActiveDelayedScanKey = sceneName;
+            MelonCoroutines.Start(DelayedSceneScans(sceneName));
+        }
+
+        private static IEnumerator DelayedSceneScans(string sceneName)
+        {
+            float[] delays = { 0.5f, 1.0f, 2.0f, 4.0f };
+            foreach (float delay in delays)
+            {
+                yield return new WaitForSeconds(delay);
+                TryApplyToAllLoadedTexts($"场景延迟扫描：{sceneName}+{delay.ToString("0.0", CultureInfo.InvariantCulture)}s");
+            }
+
+            if (string.Equals(ActiveDelayedScanKey, sceneName, StringComparison.Ordinal))
+            {
+                ActiveDelayedScanKey = null;
+            }
+        }
+
+        private static void InstallNativeFontMemoryHook()
+        {
+            try
+            {
+                IntPtr unityPlayer = GetModuleHandle("UnityPlayer.dll");
+                if (unityPlayer == IntPtr.Zero)
+                {
+                    WarnOnce("无法安装 TTF 内存字体加载入口：未找到 UnityPlayer.dll 模块。");
+                    return;
+                }
+
+                IntPtr loadDynamicFaceAddress = IntPtr.Add(unityPlayer, (int)FontLoadDynamicFaceRva);
+
+                FontLoadDynamicFaceDetourDelegate = FontLoadDynamicFaceDetour;
+
+                FontLoadDynamicFaceHook = new NativeHook<FontLoadDynamicFaceDelegate>(
+                    loadDynamicFaceAddress,
+                    Marshal.GetFunctionPointerForDelegate(FontLoadDynamicFaceDetourDelegate));
+
+                FontLoadDynamicFaceHook.Attach();
+                LOG.Msg($"已安装 TTF 内存字体加载入口：LoadDynamicFace=0x{loadDynamicFaceAddress.ToInt64():X}");
+            }
+            catch (Exception ex)
+            {
+                WarnOnce($"安装 TTF 内存字体加载入口失败：{ex.Message}");
+            }
+        }
+
+        private static void FontLoadDynamicFaceDetour(IntPtr fontResource)
+        {
+            InjectPendingNativeFontMemory(fontResource);
+            FontLoadDynamicFaceHook.Trampoline(fontResource);
+        }
+
+        private static void InjectPendingNativeFontMemory(IntPtr fontResource)
+        {
+            if (fontResource == IntPtr.Zero || PendingNativeFontMemory == null)
+            {
+                return;
+            }
+
+            NativeFontMemory memory = PendingNativeFontMemory;
+            PendingNativeFontMemory = null;
+
+            try
+            {
+                Marshal.WriteIntPtr(fontResource, 0x80, memory.Buffer);
+                Marshal.WriteInt32(fontResource, 0x90, memory.Size);
+                memory.InjectionCount++;
+                if (memory.InjectionCount == 1)
+                {
+                    LOG.Msg($"[字体内存注入] 首次注入已缓存 TTF 内存：fontRes=0x{fontResource.ToInt64():X}，size={memory.Size}，sha256={memory.Hash}");
+                }
+                else
+                {
+                    LOG.Msg($"[字体内存注入] 复用已缓存 TTF 内存：第 {memory.InjectionCount} 次，fontRes=0x{fontResource.ToInt64():X}，size={memory.Size}，sha256={memory.Hash}");
+                }
+            }
+            catch (Exception ex)
+            {
+                WarnOnce($"注入 TTF 内存失败：{memory.SourcePath}，{ex.Message}");
+            }
+        }
+
+        private static bool TryResolveRule(string currentFontName, out FontReplacementRule rule)
         {
             string normalizedFontName = NormalizeFontName(currentFontName);
-            return ReplacementRules.TryGetValue(normalizedFontName, out rule);
+            if (OverrideRules.TryGetValue(normalizedFontName, out rule))
+            {
+                return true;
+            }
+
+            rule = DefaultRule;
+            return rule != null;
         }
 
         private static Font ResolveFont(FontReplacementRule rule)
         {
-            string cacheKey = $"{rule.SourceKind}:{rule.SourcePath}:{rule.AssetName}";
-            if (CachedFonts.TryGetValue(cacheKey, out Font cachedFont) && cachedFont != null)
+            string cacheKey = $"{Path.GetFullPath(Path.Combine(ConfigDir, rule.SourcePath))}:{rule.AssetName}";
+            if (CachedFonts.TryGetValue(cacheKey, out Font cachedFont))
             {
-                return cachedFont;
+                if (cachedFont != null)
+                {
+                    return cachedFont;
+                }
+
+                RemoveCachedFont(cacheKey, cachedFont);
             }
 
-            Font loadedFont = rule.SourceKind switch
-            {
-                FontSourceKind.Bundle => LoadFontFromBundle(rule),
-                FontSourceKind.Os => LoadFontFromSystem(rule),
-                _ => null
-            };
-
+            Font loadedFont = LoadFontFromTtf(rule);
             if (loadedFont != null)
             {
                 CachedFonts[cacheKey] = loadedFont;
+                try
+                {
+                    CachedFontInstanceIds.Add(loadedFont.GetInstanceID());
+                }
+                catch
+                {
+                }
             }
 
             return loadedFont;
         }
 
-        private static Font LoadFontFromBundle(FontReplacementRule rule)
+        private static void RemoveCachedFont(string cacheKey, Font font)
         {
-            string bundlePath = Path.Combine(ConfigDir, rule.SourcePath);
-            if (!File.Exists(bundlePath))
+            CachedFonts.Remove(cacheKey);
+            try
             {
-                WarnOnce($"未找到字体 AssetBundle：{bundlePath}");
+                if (font != null)
+                {
+                    CachedFontInstanceIds.Remove(font.GetInstanceID());
+                }
+            }
+            catch
+            {
+            }
+        }
+
+        private static Font LoadFontFromTtf(FontReplacementRule rule)
+        {
+            string fontPath = Path.GetFullPath(Path.Combine(ConfigDir, rule.SourcePath));
+            if (!File.Exists(fontPath))
+            {
+                WarnOnce($"未找到 TTF 字体文件：{fontPath}");
                 return null;
             }
 
-            if (!CachedBundles.TryGetValue(bundlePath, out AssetBundle bundle) || bundle == null)
+            try
             {
-                bundle = AssetBundle.LoadFromFile(bundlePath);
-                if (bundle == null)
+                NativeFontMemory memory = ResolveNativeFontMemory(fontPath);
+                if (memory == null)
                 {
-                    WarnOnce($"加载字体 AssetBundle 失败：{bundlePath}");
                     return null;
                 }
 
-                CachedBundles[bundlePath] = bundle;
-            }
-
-            if (string.IsNullOrWhiteSpace(rule.AssetName))
-            {
-                WarnOnce($"Bundle 规则缺少字体资源名：{rule.OriginalFontName}");
-                return null;
-            }
-
-            Font font = bundle.LoadAsset<Font>(rule.AssetName);
-            if (font == null)
-            {
-                WarnOnce($"Bundle 中未找到字体资源：{rule.AssetName}");
-            }
-
-            return font;
-        }
-
-        private static Font LoadFontFromSystem(FontReplacementRule rule)
-        {
-            try
-            {
-                return Font.CreateDynamicFontFromOSFont(rule.SourcePath, 16);
+                List<string> fontNames = ResolveFontNames(rule, fontPath, memory);
+                return TryCreateDynamicFontFromTtfMemory(fontNames, memory);
             }
             catch (Exception ex)
             {
-                WarnOnce($"加载系统字体失败：{rule.SourcePath}，{ex.Message}");
+                WarnOnce($"加载 TTF 字体失败：{fontPath}，{ex.Message}");
                 return null;
             }
         }
 
-        private static bool TryParseSourceKind(string sourceKindText, out FontSourceKind sourceKind)
+        private static Font TryCreateDynamicFontFromTtfMemory(List<string> fontNames, NativeFontMemory memory)
         {
-            if (string.Equals(sourceKindText, "bundle", StringComparison.OrdinalIgnoreCase))
+            if (fontNames.Count == 0)
             {
-                sourceKind = FontSourceKind.Bundle;
-                return true;
+                WarnOnce($"无法读取 TTF 字体名称：{memory.SourcePath}");
+                return null;
             }
 
-            if (string.Equals(sourceKindText, "os", StringComparison.OrdinalIgnoreCase))
+            foreach (string fontName in fontNames)
             {
-                sourceKind = FontSourceKind.Os;
-                return true;
+                Font font = new Font();
+                PendingNativeFontMemory = memory;
+                try
+                {
+                    Font.Internal_CreateDynamicFont(font, new Il2CppStringArray(new[] { fontName }), 16);
+                }
+                finally
+                {
+                    PendingNativeFontMemory = null;
+                }
+
+                PreserveRuntimeFont(font);
+
+                string unityFontName = GetUnityFontName(font);
+                string unityFontNames = GetUnityFontNamesText(font);
+                bool probeOk = CanGenerateProbeGlyph(font);
+                LOG.Msg($"创建内存 TTF 动态字体：请求={fontName}，UnityName={unityFontName}，UnityFontNames=[{unityFontNames}]，中文测试字形={(probeOk ? "通过" : "失败")}，sha256={memory.Hash}");
+
+                if (probeOk)
+                {
+                    return font;
+                }
             }
 
-            sourceKind = FontSourceKind.Bundle;
-            return false;
+            return null;
+        }
+
+        private static List<string> ResolveFontNames(FontReplacementRule rule, string fontPath, NativeFontMemory memory)
+        {
+            string cacheKey = $"{fontPath}:{rule.AssetName}";
+            if (CachedFontNameLists.TryGetValue(cacheKey, out string[] cachedNames))
+            {
+                return new List<string>(cachedNames);
+            }
+
+            List<string> fontNames = string.IsNullOrWhiteSpace(rule.AssetName)
+                ? new List<string>(memory.FamilyNames)
+                : new List<string>();
+            AddUniqueFontName(fontNames, rule.AssetName);
+            AddUniqueFontName(fontNames, Path.GetFileNameWithoutExtension(fontPath));
+            CachedFontNameLists[cacheKey] = fontNames.ToArray();
+            return fontNames;
+        }
+
+        private static NativeFontMemory ResolveNativeFontMemory(string fontPath)
+        {
+            if (CachedNativeFontMemories.TryGetValue(fontPath, out NativeFontMemory cachedMemory))
+            {
+                return cachedMemory;
+            }
+
+            byte[] data = File.ReadAllBytes(fontPath);
+            if (data.Length <= 0 || data.Length > int.MaxValue)
+            {
+                WarnOnce($"TTF 字体文件大小异常：{fontPath}");
+                return null;
+            }
+
+            IntPtr buffer = Marshal.AllocHGlobal(data.Length);
+            Marshal.Copy(data, 0, buffer, data.Length);
+
+            string hash = Convert.ToHexString(SHA256.HashData(data));
+            string[] familyNames = ReadTtfFamilyNames(data).ToArray();
+            NativeFontMemory memory = new NativeFontMemory(buffer, data.Length, fontPath, hash, familyNames);
+            CachedNativeFontMemories[fontPath] = memory;
+            PreservedNativeFontMemories.Add(memory);
+            LOG.Msg($"已读取并缓存 TTF 字体内存：size={memory.Size}，sha256={memory.Hash}，文件={memory.SourcePath}");
+            return memory;
+        }
+
+        private static void PreserveRuntimeFont(Font font)
+        {
+            try
+            {
+                font.hideFlags = HideFlags.DontUnloadUnusedAsset;
+                PreservedRuntimeFonts.Add(font);
+            }
+            catch
+            {
+            }
+        }
+
+        private static List<string> ReadTtfFamilyNames(byte[] data)
+        {
+            List<string> names = new List<string>();
+            if (data.Length < 12)
+            {
+                return names;
+            }
+
+            string signature = Encoding.ASCII.GetString(data, 0, 4);
+            if (signature == "ttcf")
+            {
+                if (data.Length < 12)
+                {
+                    return names;
+                }
+
+                uint fontCount = ReadUInt32BigEndian(data, 8);
+                for (int i = 0; i < fontCount; i++)
+                {
+                    int offsetRecord = 12 + i * 4;
+                    if (offsetRecord + 4 > data.Length)
+                    {
+                        break;
+                    }
+
+                    int faceOffset = (int)ReadUInt32BigEndian(data, offsetRecord);
+                    ReadTtfFamilyNamesFromFace(data, faceOffset, names);
+                }
+
+                return names;
+            }
+
+            ReadTtfFamilyNamesFromFace(data, 0, names);
+            return names;
+        }
+
+        private static void ReadTtfFamilyNamesFromFace(byte[] data, int faceOffset, List<string> names)
+        {
+            if (faceOffset < 0 || faceOffset + 12 > data.Length)
+            {
+                return;
+            }
+
+            ushort tableCount = ReadUInt16BigEndian(data, faceOffset + 4);
+            for (int i = 0; i < tableCount; i++)
+            {
+                int tableRecordOffset = faceOffset + 12 + i * 16;
+                if (tableRecordOffset + 16 > data.Length)
+                {
+                    return;
+                }
+
+                string tag = Encoding.ASCII.GetString(data, tableRecordOffset, 4);
+                if (tag != "name")
+                {
+                    continue;
+                }
+
+                int rawNameTableOffset = (int)ReadUInt32BigEndian(data, tableRecordOffset + 8);
+                int nameTableOffset = ResolveTtfTableOffset(data, rawNameTableOffset, faceOffset);
+                if (nameTableOffset + 6 > data.Length)
+                {
+                    return;
+                }
+
+                ushort nameCount = ReadUInt16BigEndian(data, nameTableOffset + 2);
+                ushort stringOffset = ReadUInt16BigEndian(data, nameTableOffset + 4);
+                List<string> fallbackNames = new List<string>();
+
+                for (int j = 0; j < nameCount; j++)
+                {
+                    int nameRecordOffset = nameTableOffset + 6 + j * 12;
+                    if (nameRecordOffset + 12 > data.Length)
+                    {
+                        break;
+                    }
+
+                    ushort platformId = ReadUInt16BigEndian(data, nameRecordOffset);
+                    ushort encodingId = ReadUInt16BigEndian(data, nameRecordOffset + 2);
+                    ushort nameId = ReadUInt16BigEndian(data, nameRecordOffset + 6);
+                    ushort length = ReadUInt16BigEndian(data, nameRecordOffset + 8);
+                    ushort offset = ReadUInt16BigEndian(data, nameRecordOffset + 10);
+                    if (nameId != 1 && nameId != 4 && nameId != 6 && nameId != 16)
+                    {
+                        continue;
+                    }
+
+                    int textOffset = nameTableOffset + stringOffset + offset;
+                    if (textOffset + length > data.Length)
+                    {
+                        continue;
+                    }
+
+                    string name = DecodeTtfName(data, textOffset, length, platformId, encodingId);
+                    name = name.Trim('\0', ' ', '\r', '\n', '\t');
+                    if (string.IsNullOrWhiteSpace(name))
+                    {
+                        continue;
+                    }
+
+                    if (nameId == 16)
+                    {
+                        AddUniqueFontName(names, name);
+                    }
+                    else
+                    {
+                        AddUniqueFontName(fallbackNames, name);
+                    }
+                }
+
+                foreach (string fallbackName in fallbackNames)
+                {
+                    AddUniqueFontName(names, fallbackName);
+                }
+
+                return;
+            }
+        }
+
+        private static string DecodeTtfName(byte[] data, int offset, int length, ushort platformId, ushort encodingId)
+        {
+            if (platformId == 0 || platformId == 3 || (platformId == 2 && encodingId == 1))
+            {
+                return Encoding.BigEndianUnicode.GetString(data, offset, length);
+            }
+
+            return Encoding.UTF8.GetString(data, offset, length);
+        }
+
+        private static int ResolveTtfTableOffset(byte[] data, int rawOffset, int faceOffset)
+        {
+            if (rawOffset >= 0 && rawOffset + 6 <= data.Length)
+            {
+                return rawOffset;
+            }
+
+            int relativeOffset = faceOffset + rawOffset;
+            if (relativeOffset >= 0 && relativeOffset + 6 <= data.Length)
+            {
+                return relativeOffset;
+            }
+
+            return data.Length;
+        }
+
+        private static void AddUniqueFontName(List<string> names, string fontName)
+        {
+            string normalizedFontName = NormalizeFontName(fontName);
+            if (!IsUsableFontName(normalizedFontName))
+            {
+                return;
+            }
+
+            foreach (string name in names)
+            {
+                if (string.Equals(name, normalizedFontName, StringComparison.OrdinalIgnoreCase))
+                {
+                    return;
+                }
+            }
+
+            names.Add(normalizedFontName);
+        }
+
+        private static bool IsUsableFontName(string fontName)
+        {
+            if (string.IsNullOrWhiteSpace(fontName) || fontName.IndexOf('\uFFFD') >= 0)
+            {
+                return false;
+            }
+
+            foreach (char character in fontName)
+            {
+                if (char.IsControl(character))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        private static bool CanGenerateProbeGlyph(Font font)
+        {
+            try
+            {
+                const string probeText = "汉一A";
+                font.RequestCharactersInTexture(probeText, 16, FontStyle.Normal);
+                foreach (char character in probeText)
+                {
+                    if (!font.HasCharacter(character))
+                    {
+                        return false;
+                    }
+
+                    CharacterInfo characterInfo;
+                    if (!font.GetCharacterInfo(character, out characterInfo, 16, FontStyle.Normal))
+                    {
+                        return false;
+                    }
+                }
+
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private static string GetUnityFontName(Font font)
+        {
+            try
+            {
+                return font.name;
+            }
+            catch
+            {
+                return "<读取失败>";
+            }
+        }
+
+        private static string GetUnityFontNamesText(Font font)
+        {
+            try
+            {
+                Il2CppStringArray names = font.fontNames;
+                if (names == null || names.Length == 0)
+                {
+                    return string.Empty;
+                }
+
+                List<string> values = new List<string>();
+                for (int i = 0; i < names.Length; i++)
+                {
+                    values.Add(names[i]);
+                }
+
+                return string.Join(", ", values);
+            }
+            catch
+            {
+                return "<读取失败>";
+            }
+        }
+
+        private static ushort ReadUInt16BigEndian(byte[] data, int offset)
+        {
+            return (ushort)((data[offset] << 8) | data[offset + 1]);
+        }
+
+        private static uint ReadUInt32BigEndian(byte[] data, int offset)
+        {
+            return ((uint)data[offset] << 24) |
+                   ((uint)data[offset + 1] << 16) |
+                   ((uint)data[offset + 2] << 8) |
+                   data[offset + 3];
         }
 
         private static string NormalizeFontName(string fontName)
@@ -347,6 +1012,38 @@ namespace LongYinFontReplacement
             return normalized;
         }
 
+        private static string StripRichTextTags(string text)
+        {
+            if (string.IsNullOrEmpty(text))
+            {
+                return string.Empty;
+            }
+
+            var builder = new StringBuilder(text.Length);
+            bool inTag = false;
+            foreach (char character in text)
+            {
+                if (character == '<')
+                {
+                    inTag = true;
+                    continue;
+                }
+
+                if (character == '>' && inTag)
+                {
+                    inTag = false;
+                    continue;
+                }
+
+                if (!inTag)
+                {
+                    builder.Append(character);
+                }
+            }
+
+            return builder.ToString();
+        }
+
         private static void WarnOnce(string message)
         {
             if (WarnedMessages.Add(message))
@@ -354,6 +1051,12 @@ namespace LongYinFontReplacement
                 LOG.Warning(message);
             }
         }
+
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
+        private static extern IntPtr GetModuleHandle(string moduleName);
+
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        private delegate void FontLoadDynamicFaceDelegate(IntPtr fontResource);
     }
 
     [HarmonyPatch]
@@ -363,14 +1066,14 @@ namespace LongYinFontReplacement
         [HarmonyPatch(typeof(LTLocalization), "CheckTextFont")]
         private static bool CheckTextFontPrefix(Text targetText)
         {
-            return !Main.TryApplyToText(targetText, "LTLocalization.CheckTextFont");
+            return !Main.TryApplyToText(targetText);
         }
 
         [HarmonyPostfix]
         [HarmonyPatch(typeof(LTLocalization), "AddText")]
         private static void AddTextPostfix(Text targetText)
         {
-            Main.TryApplyToText(targetText, "LTLocalization.AddText");
+            Main.TryApplyToText(targetText);
         }
 
         [HarmonyPostfix]
@@ -378,6 +1081,7 @@ namespace LongYinFontReplacement
         private static void InitPostfix()
         {
             Main.TryApplyToAllLoadedTexts("LTLocalization.Init");
+            Main.StartDelayedSceneScans("LTLocalization.Init");
         }
 
         [HarmonyPostfix]
@@ -385,6 +1089,15 @@ namespace LongYinFontReplacement
         private static void ManualSetLanguagePostfix()
         {
             Main.TryApplyToAllLoadedTexts("LTLocalization.ManualSetLanguage");
+            Main.StartDelayedSceneScans("LTLocalization.ManualSetLanguage");
         }
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(Text), "OnEnable")]
+        private static void TextOnEnablePostfix(Text __instance)
+        {
+            Main.TryApplyToText(__instance);
+        }
+
     }
 }

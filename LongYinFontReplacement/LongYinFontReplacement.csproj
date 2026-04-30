@@ -27,10 +27,6 @@
       <HintPath>..\..\MelonLoader\Il2CppAssemblies\UnityEngine.TextRenderingModule.dll</HintPath>
       <Private>False</Private>
     </Reference>
-    <Reference Include="UnityEngine.AssetBundleModule">
-      <HintPath>..\..\MelonLoader\Il2CppAssemblies\UnityEngine.AssetBundleModule.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
     <Reference Include="UnityEngine.UI">
       <HintPath>..\..\MelonLoader\Il2CppAssemblies\UnityEngine.UI.dll</HintPath>
       <Private>False</Private>
@@ -77,14 +73,17 @@
     </ReadModVersion>
     <PropertyGroup>
       <PackageZipPath>$(MSBuildProjectDirectory)\LongYinFontReplacement-v$(ModVersion).zip</PackageZipPath>
+      <PackageModsDir>$(PackageTempDir)Mods\</PackageModsDir>
+      <PackageUserDataDir>$(PackageTempDir)UserData\LongYinFontReplacement\</PackageUserDataDir>
     </PropertyGroup>
     <ItemGroup>
-      <PackageFiles Include="$(TargetPath)" />
-      <PackageFiles Include="$(MSBuildProjectDirectory)\README.txt" />
+      <PackageUserDataFiles Include="$(MSBuildProjectDirectory)\..\..\UserData\LongYinFontReplacement\**\*.*" Exclude="$(MSBuildProjectDirectory)\..\..\UserData\LongYinFontReplacement\RuntimeFonts\**\*.*" />
     </ItemGroup>
     <RemoveDir Directories="$(PackageTempDir)" />
-    <MakeDir Directories="$(PackageTempDir)" />
-    <Copy SourceFiles="@(PackageFiles)" DestinationFolder="$(PackageTempDir)" />
+    <MakeDir Directories="$(PackageModsDir)" />
+    <MakeDir Directories="$(PackageUserDataDir)" />
+    <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(PackageModsDir)" />
+    <Copy SourceFiles="@(PackageUserDataFiles)" DestinationFolder="$(PackageUserDataDir)%(RecursiveDir)" />
     <Delete Files="$(PackageZipPath)" Condition="Exists('$(PackageZipPath)')" />
     <ZipDirectory SourceDirectory="$(PackageTempDir)" DestinationFile="$(PackageZipPath)" Overwrite="true" />
     <RemoveDir Directories="$(PackageTempDir)" />
