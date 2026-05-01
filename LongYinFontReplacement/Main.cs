@@ -14,7 +14,7 @@ using MelonLoader.NativeUtils;
 using UnityEngine;
 using UnityEngine.UI;
 
-[assembly: MelonInfo(typeof(LongYinFontReplacement.Main), "LongYinFontReplacement", "1.0.0", "SaintCirno9", null)]
+[assembly: MelonInfo(typeof(LongYinFontReplacement.Main), "LongYinFontReplacement", "1.1.0", "SaintCirno9", null)]
 [assembly: MelonGame("TppStudio", "LongYinLiZhiZhuan")]
 
 namespace LongYinFontReplacement
@@ -74,14 +74,20 @@ namespace LongYinFontReplacement
 
         internal static FontReplacementRule DefaultRule;
         internal static readonly Dictionary<string, FontReplacementRule> OverrideRules = new(StringComparer.OrdinalIgnoreCase);
+        internal static readonly HashSet<string> PreserveFontNames = new(StringComparer.OrdinalIgnoreCase);
         internal static readonly Dictionary<string, Font> CachedFonts = new(StringComparer.OrdinalIgnoreCase);
         internal static readonly Dictionary<string, NativeFontMemory> CachedNativeFontMemories = new(StringComparer.OrdinalIgnoreCase);
         internal static readonly Dictionary<string, string[]> CachedFontNameLists = new(StringComparer.OrdinalIgnoreCase);
+        internal static readonly HashSet<string> FailedFontCacheKeys = new(StringComparer.OrdinalIgnoreCase);
         internal static readonly HashSet<int> CachedFontInstanceIds = new();
         internal static readonly List<Font> PreservedRuntimeFonts = new();
         internal static readonly List<NativeFontMemory> PreservedNativeFontMemories = new();
         internal static readonly Dictionary<int, float> OriginalLineSpacings = new();
         internal static readonly Dictionary<int, int> OriginalFontSizes = new();
+        internal static readonly Dictionary<int, Font> OriginalFontsByTextId = new();
+        internal static readonly Dictionary<int, FontReplacementRule> AppliedRulesByTextId = new();
+        internal static readonly Dictionary<int, Font> FallbackFontsByReplacementFontId = new();
+        internal static readonly HashSet<int> SkippedTextInstanceIds = new();
         internal static readonly HashSet<string> WarnedMessages = new(StringComparer.OrdinalIgnoreCase);
 
         public static readonly MelonLogger.Instance LOG = Melon<Main>.Logger;
@@ -125,14 +131,27 @@ namespace LongYinFontReplacement
                 "# 字体替换配置，编码请保持 UTF-8\r\n" +
                 "# 全局通用字体：default|字体文件路径|字体族名|行距倍率|字号倍率\r\n" +
                 "# 特定字体覆盖：override|原字体名|字体文件路径|字体族名|行距倍率|字号倍率\r\n" +
+                "# 保留原版字体：preserve|原字体名\r\n" +
                 "# 字体文件路径相对 UserData\\LongYinFontReplacement，字体族名可留空自动读取。\r\n" +
-                "# 行距倍率会乘到原组件行距上：1.00=保持原版，1.20=加大 20%，0.80=压缩 20%。原版不同 UI 可能本来就是 1、0.9、0.8 或 0.75。\r\n" +
+                "# 行距倍率会乘到原组件行距上：1.00=保持原版，1.20=加大 20%，0.80=压缩 20%。\r\n" +
+                "# 原版不同 UI 可能本来就是 1、0.9、0.8 或 0.75；如果只是换字体不想改行距，就填 1.00。\r\n" +
                 "# 字号倍率会乘到原组件字号上：1.00=保持原版，0.85=缩小 15%。笔画外扩或字面偏大的字体建议 0.80-0.90。\r\n" +
                 "#\r\n" +
                 "# 备用字体准备建议：\r\n" +
                 "# 游戏内置字体种类较多，如需精细覆盖，建议提前准备与原版文件名对应的 ttf/otf 字体文件。\r\n" +
                 "# 文件名不必和原版完全相同，但 override 的“原字体名”要和游戏原字体匹配。\r\n" +
-                "default|Fonts\\庞门正道细线体.ttf||1.00|1.00\r\n" +
+                "default|Fonts\\猫啃网糖圆体.ttf||1.00|1.00\r\n" +
+                "\r\n" +
+                "# 保留标题 / 装饰 / 英文字体，不被 default 替换。\r\n" +
+                "# preserve|汇文明朝体\r\n" +
+                "# preserve|字体家AI造字剑客\r\n" +
+                "# preserve|字体家AI造字霸牙\r\n" +
+                "# preserve|LiberationSans\r\n" +
+                "# preserve|Roboto-Bold\r\n" +
+                "# preserve|Electromagnetic Highway Sign\r\n" +
+                "# preserve|Oswald-Bold\r\n" +
+                "# preserve|Anton\r\n" +
+                "# preserve|Bangers\r\n" +
                 "\r\n" +
                 "# 常用字体用途参考：\r\n" +
                 "# 正文 / 侧边栏任务字体：汇文明朝体\r\n" +
@@ -141,19 +160,20 @@ namespace LongYinFontReplacement
                 "# 常规界面显示字体：SourceHanSansCN 系列\r\n" +
                 "\r\n" +
                 "# 全量原版字体覆盖模板，按需取消注释并改成自己的字体文件。\r\n" +
-                "# override|汇文明朝体|Fonts\\庞门正道细线体.ttf||1.00|1.00\r\n" +
-                "# override|SourceHanSerifCN-Bold|Fonts\\庞门正道细线体.ttf||1.00|1.00\r\n" +
-                "# override|SourceHanSerifCN-Medium|Fonts\\庞门正道细线体.ttf||1.00|1.00\r\n" +
-                "# override|SourceHanSansCN-Bold|Fonts\\庞门正道细线体.ttf||1.00|1.00\r\n" +
-                "# override|SourceHanSansCN-Regular|Fonts\\庞门正道细线体.ttf||1.00|1.00\r\n" +
-                "# override|字体家AI造字剑客|Fonts\\庞门正道细线体.ttf||1.00|1.00\r\n" +
-                "# override|字体家AI造字霸牙|Fonts\\庞门正道细线体.ttf||1.00|1.00\r\n" +
-                "# override|LiberationSans|Fonts\\庞门正道细线体.ttf||1.00|1.00\r\n" +
-                "# override|Roboto-Bold|Fonts\\庞门正道细线体.ttf||1.00|1.00\r\n" +
-                "# override|Electromagnetic Highway Sign|Fonts\\庞门正道细线体.ttf||1.00|1.00\r\n" +
-                "# override|Oswald-Bold|Fonts\\庞门正道细线体.ttf||1.00|1.00\r\n" +
-                "# override|Anton|Fonts\\庞门正道细线体.ttf||1.00|1.00\r\n" +
-                "# override|Bangers|Fonts\\庞门正道细线体.ttf||1.00|1.00\r\n";
+                "# 如需让某个原版字体不被 default 替换，可使用 preserve；同名 override 优先于 preserve。\r\n" +
+                "# override|汇文明朝体|Fonts\\猫啃网糖圆体.ttf||1.00|1.00\r\n" +
+                "# override|SourceHanSerifCN-Bold|Fonts\\猫啃网糖圆体.ttf||1.00|1.00\r\n" +
+                "# override|SourceHanSerifCN-Medium|Fonts\\猫啃网糖圆体.ttf||1.00|1.00\r\n" +
+                "# override|SourceHanSansCN-Bold|Fonts\\猫啃网糖圆体.ttf||1.00|1.00\r\n" +
+                "# override|SourceHanSansCN-Regular|Fonts\\猫啃网糖圆体.ttf||1.00|1.00\r\n" +
+                "# override|字体家AI造字剑客|Fonts\\猫啃网糖圆体.ttf||1.00|1.00\r\n" +
+                "# override|字体家AI造字霸牙|Fonts\\猫啃网糖圆体.ttf||1.00|1.00\r\n" +
+                "# override|LiberationSans|Fonts\\猫啃网糖圆体.ttf||1.00|1.00\r\n" +
+                "# override|Roboto-Bold|Fonts\\猫啃网糖圆体.ttf||1.00|1.00\r\n" +
+                "# override|Electromagnetic Highway Sign|Fonts\\猫啃网糖圆体.ttf||1.00|1.00\r\n" +
+                "# override|Oswald-Bold|Fonts\\猫啃网糖圆体.ttf||1.00|1.00\r\n" +
+                "# override|Anton|Fonts\\猫啃网糖圆体.ttf||1.00|1.00\r\n" +
+                "# override|Bangers|Fonts\\猫啃网糖圆体.ttf||1.00|1.00\r\n";
 
             File.WriteAllText(ConfigPath, sampleConfig);
         }
@@ -162,10 +182,16 @@ namespace LongYinFontReplacement
         {
             DefaultRule = null;
             OverrideRules.Clear();
+            PreserveFontNames.Clear();
             CachedFonts.Clear();
             CachedNativeFontMemories.Clear();
             CachedFontNameLists.Clear();
+            FailedFontCacheKeys.Clear();
             CachedFontInstanceIds.Clear();
+            OriginalFontsByTextId.Clear();
+            AppliedRulesByTextId.Clear();
+            FallbackFontsByReplacementFontId.Clear();
+            SkippedTextInstanceIds.Clear();
             WarnedMessages.Clear();
 
             if (!File.Exists(ConfigPath))
@@ -175,6 +201,7 @@ namespace LongYinFontReplacement
             }
 
             int overrideCount = 0;
+            int preserveCount = 0;
             foreach (string rawLine in File.ReadAllLines(ConfigPath))
             {
                 string line = rawLine.Trim();
@@ -188,9 +215,30 @@ namespace LongYinFontReplacement
                 string ruleType = parts[0].Trim();
                 bool isDefaultRule = string.Equals(ruleType, "default", StringComparison.OrdinalIgnoreCase);
                 bool isOverrideRule = string.Equals(ruleType, "override", StringComparison.OrdinalIgnoreCase);
-                if (!isDefaultRule && !isOverrideRule)
+                bool isPreserveRule = string.Equals(ruleType, "preserve", StringComparison.OrdinalIgnoreCase);
+                if (!isDefaultRule && !isOverrideRule && !isPreserveRule)
                 {
                     WarnOnce($"未知的配置规则类型：{ruleType}");
+                    continue;
+                }
+
+                if (isPreserveRule)
+                {
+                    if (parts.Length != 2)
+                    {
+                        WarnOnce($"保留原版字体配置行格式不正确：{line}");
+                        continue;
+                    }
+
+                    string preservedFontName = NormalizeFontName(parts[1]);
+                    if (string.IsNullOrWhiteSpace(preservedFontName))
+                    {
+                        WarnOnce($"保留原版字体配置行缺少原字体名：{line}");
+                        continue;
+                    }
+
+                    PreserveFontNames.Add(preservedFontName);
+                    preserveCount++;
                     continue;
                 }
 
@@ -248,7 +296,7 @@ namespace LongYinFontReplacement
                 }
             }
 
-            LOG.Msg($"已加载字体替换配置：全局通用字体={(DefaultRule == null ? "无" : "有")}，特定覆盖 {overrideCount} 条。");
+            LOG.Msg($"已加载字体替换配置：全局通用字体={(DefaultRule == null ? "无" : "有")}，特定覆盖 {overrideCount} 条，保留原版 {preserveCount} 条。");
         }
 
         internal static bool TryApplyToText(Text targetText)
@@ -263,23 +311,14 @@ namespace LongYinFontReplacement
                 return false;
             }
 
-            if (string.IsNullOrWhiteSpace(targetText.text))
+            Font currentFont = targetText.font;
+            if (currentFont != null && string.IsNullOrWhiteSpace(targetText.text))
             {
                 return false;
             }
 
-            Font currentFont = targetText.font;
-            if (currentFont == null)
-            {
-                return ApplyDefaultFontToText(targetText);
-            }
-
-            if (IsCurrentFontAlreadyReplacement(currentFont))
-            {
-                return ApplyDefaultStyleToText(targetText, currentFont);
-            }
-
-            if (!TryResolveRule(currentFont.name, out FontReplacementRule rule))
+            int textId = targetText.GetInstanceID();
+            if (SkippedTextInstanceIds.Contains(textId))
             {
                 return false;
             }
@@ -287,6 +326,53 @@ namespace LongYinFontReplacement
             try
             {
                 ApplyingTextFont = true;
+
+                if (currentFont == null)
+                {
+                    if (AppliedRulesByTextId.TryGetValue(textId, out FontReplacementRule previousRule))
+                    {
+                        return ApplyRuleFontToText(targetText, previousRule) ||
+                            ApplyDefaultFontToText(targetText);
+                    }
+
+                    return ApplyDefaultFontToText(targetText);
+                }
+
+                if (IsCurrentFontAlreadyReplacement(currentFont))
+                {
+                    if (AppliedRulesByTextId.TryGetValue(textId, out FontReplacementRule appliedRule))
+                    {
+                        if (!CanRenderText(currentFont, targetText.text, targetText.fontSize, targetText.fontStyle, appliedRule))
+                        {
+                            return RestoreOriginalFont(targetText) ||
+                                RestoreFallbackFontForReplacement(targetText, currentFont) ||
+                                ApplyDefaultFontToTextIfDifferent(targetText, appliedRule);
+                        }
+
+                        return ApplyStyleToText(targetText, currentFont, appliedRule);
+                    }
+
+                    if (TryResolveReplacementRule(currentFont, out FontReplacementRule inheritedRule))
+                    {
+                        if (!CanRenderText(currentFont, targetText.text, targetText.fontSize, targetText.fontStyle, inheritedRule))
+                        {
+                            return RestoreOriginalFont(targetText) ||
+                                RestoreFallbackFontForReplacement(targetText, currentFont) ||
+                                ApplyDefaultFontToTextIfDifferent(targetText, inheritedRule);
+                        }
+
+                        return ApplyStyleToText(targetText, currentFont, inheritedRule);
+                    }
+
+                    return RestoreFallbackFontForReplacement(targetText, currentFont) ||
+                        ApplyDefaultFontToText(targetText) ||
+                        RestoreOriginalFont(targetText);
+                }
+
+                if (!TryResolveRule(currentFont.name, out FontReplacementRule rule))
+                {
+                    return false;
+                }
 
                 Font replacementFont = ResolveFont(rule);
                 if (replacementFont == null)
@@ -300,7 +386,9 @@ namespace LongYinFontReplacement
                     return false;
                 }
 
-                int textId = targetText.GetInstanceID();
+                PreserveOriginalFont(targetText, currentFont);
+                PreserveFallbackFontForReplacement(replacementFont, currentFont);
+
                 if (!OriginalLineSpacings.ContainsKey(textId))
                 {
                     OriginalLineSpacings[textId] = targetText.lineSpacing;
@@ -318,6 +406,7 @@ namespace LongYinFontReplacement
 
                 targetText.lineSpacing = OriginalLineSpacings[textId] * rule.LineSpacingScale;
                 targetText.fontSize = Math.Max(1, (int)Math.Round(OriginalFontSizes[textId] * rule.FontSizeScale));
+                AppliedRulesByTextId[textId] = rule;
                 targetText.SetAllDirty();
                 return true;
             }
@@ -334,12 +423,30 @@ namespace LongYinFontReplacement
                 return false;
             }
 
-            Font replacementFont = ResolveFont(DefaultRule);
-            if (replacementFont == null ||
-                !CanRenderText(replacementFont, targetText.text, targetText.fontSize, targetText.fontStyle, DefaultRule))
+            return ApplyRuleFontToText(targetText, DefaultRule);
+        }
+
+        private static bool ApplyDefaultFontToTextIfDifferent(Text targetText, FontReplacementRule currentRule)
+        {
+            if (DefaultRule == null || ReferenceEquals(DefaultRule, currentRule))
             {
                 return false;
             }
+
+            return ApplyDefaultFontToText(targetText);
+        }
+
+        private static bool ApplyRuleFontToText(Text targetText, FontReplacementRule rule)
+        {
+            Font replacementFont = ResolveFont(rule);
+            if (replacementFont == null ||
+                !CanRenderText(replacementFont, targetText.text, targetText.fontSize, targetText.fontStyle, rule))
+            {
+                return false;
+            }
+
+            PreserveOriginalFont(targetText, targetText.font);
+            PreserveFallbackFontForReplacement(replacementFont, targetText.font);
 
             int textId = targetText.GetInstanceID();
             if (!OriginalLineSpacings.ContainsKey(textId))
@@ -353,15 +460,118 @@ namespace LongYinFontReplacement
             }
 
             targetText.font = replacementFont;
-            targetText.lineSpacing = OriginalLineSpacings[textId] * DefaultRule.LineSpacingScale;
-            targetText.fontSize = Math.Max(1, (int)Math.Round(OriginalFontSizes[textId] * DefaultRule.FontSizeScale));
+            targetText.lineSpacing = OriginalLineSpacings[textId] * rule.LineSpacingScale;
+            targetText.fontSize = Math.Max(1, (int)Math.Round(OriginalFontSizes[textId] * rule.FontSizeScale));
+            AppliedRulesByTextId[textId] = rule;
             targetText.SetAllDirty();
             return true;
         }
 
-        private static bool ApplyDefaultStyleToText(Text targetText, Font replacementFont)
+        private static void PreserveOriginalFont(Text targetText, Font originalFont)
         {
-            if (DefaultRule == null)
+            if (targetText == null || originalFont == null || IsCurrentFontAlreadyReplacement(originalFont))
+            {
+                return;
+            }
+
+            int textId = targetText.GetInstanceID();
+            if (!OriginalFontsByTextId.ContainsKey(textId))
+            {
+                OriginalFontsByTextId[textId] = originalFont;
+            }
+        }
+
+        private static void PreserveFallbackFontForReplacement(Font replacementFont, Font fallbackFont)
+        {
+            if (replacementFont == null || fallbackFont == null || IsCurrentFontAlreadyReplacement(fallbackFont))
+            {
+                return;
+            }
+
+            try
+            {
+                int replacementFontId = replacementFont.GetInstanceID();
+                if (!FallbackFontsByReplacementFontId.ContainsKey(replacementFontId))
+                {
+                    FallbackFontsByReplacementFontId[replacementFontId] = fallbackFont;
+                }
+            }
+            catch
+            {
+            }
+        }
+
+        private static bool RestoreOriginalFont(Text targetText)
+        {
+            if (targetText == null)
+            {
+                return false;
+            }
+
+            int textId = targetText.GetInstanceID();
+            if (!OriginalFontsByTextId.TryGetValue(textId, out Font originalFont) || originalFont == null)
+            {
+                return false;
+            }
+
+            targetText.font = originalFont;
+            if (OriginalLineSpacings.TryGetValue(textId, out float originalLineSpacing))
+            {
+                targetText.lineSpacing = originalLineSpacing;
+            }
+
+            if (OriginalFontSizes.TryGetValue(textId, out int originalFontSize))
+            {
+                targetText.fontSize = originalFontSize;
+            }
+
+            AppliedRulesByTextId.Remove(textId);
+            SkippedTextInstanceIds.Add(textId);
+            targetText.SetAllDirty();
+            return true;
+        }
+
+        private static bool RestoreFallbackFontForReplacement(Text targetText, Font replacementFont)
+        {
+            if (targetText == null || replacementFont == null)
+            {
+                return false;
+            }
+
+            Font fallbackFont;
+            try
+            {
+                if (!FallbackFontsByReplacementFontId.TryGetValue(replacementFont.GetInstanceID(), out fallbackFont) || fallbackFont == null)
+                {
+                    return false;
+                }
+            }
+            catch
+            {
+                return false;
+            }
+
+            int textId = targetText.GetInstanceID();
+            targetText.font = fallbackFont;
+            if (OriginalLineSpacings.TryGetValue(textId, out float originalLineSpacing))
+            {
+                targetText.lineSpacing = originalLineSpacing;
+            }
+
+            if (OriginalFontSizes.TryGetValue(textId, out int originalFontSize))
+            {
+                targetText.fontSize = originalFontSize;
+            }
+
+            AppliedRulesByTextId.Remove(textId);
+            SkippedTextInstanceIds.Add(textId);
+            targetText.SetAllDirty();
+            return true;
+        }
+
+        private static bool ApplyStyleToText(Text targetText, Font replacementFont, FontReplacementRule rule)
+        {
+            if (rule == null)
             {
                 return false;
             }
@@ -377,17 +587,19 @@ namespace LongYinFontReplacement
                 OriginalFontSizes[textId] = targetText.fontSize;
             }
 
-            int targetFontSize = Math.Max(1, (int)Math.Round(OriginalFontSizes[textId] * DefaultRule.FontSizeScale));
-            float targetLineSpacing = OriginalLineSpacings[textId] * DefaultRule.LineSpacingScale;
+            int targetFontSize = Math.Max(1, (int)Math.Round(OriginalFontSizes[textId] * rule.FontSizeScale));
+            float targetLineSpacing = OriginalLineSpacings[textId] * rule.LineSpacingScale;
             if (targetText.fontSize == targetFontSize &&
                 Math.Abs(targetText.lineSpacing - targetLineSpacing) < 0.001f)
             {
+                AppliedRulesByTextId[textId] = rule;
                 return false;
             }
 
             targetText.font = replacementFont;
             targetText.lineSpacing = targetLineSpacing;
             targetText.fontSize = targetFontSize;
+            AppliedRulesByTextId[textId] = rule;
             targetText.SetAllDirty();
             return true;
         }
@@ -417,6 +629,54 @@ namespace LongYinFontReplacement
 
                 CachedFontInstanceIds.Remove(fontInstanceId);
                 return false;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private static bool TryResolveReplacementRule(Font font, out FontReplacementRule rule)
+        {
+            rule = null;
+            if (font == null)
+            {
+                return false;
+            }
+
+            if (DefaultRule != null && IsSameFontInstance(ResolveFont(DefaultRule), font))
+            {
+                rule = DefaultRule;
+                return true;
+            }
+
+            foreach (FontReplacementRule overrideRule in OverrideRules.Values)
+            {
+                if (IsSameFontInstance(ResolveFont(overrideRule), font))
+                {
+                    rule = overrideRule;
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static bool IsSameFontInstance(Font left, Font right)
+        {
+            if (left == null || right == null)
+            {
+                return false;
+            }
+
+            if (ReferenceEquals(left, right))
+            {
+                return true;
+            }
+
+            try
+            {
+                return left.GetInstanceID() == right.GetInstanceID();
             }
             catch
             {
@@ -576,6 +836,12 @@ namespace LongYinFontReplacement
                 return true;
             }
 
+            if (PreserveFontNames.Contains(normalizedFontName))
+            {
+                rule = null;
+                return false;
+            }
+
             rule = DefaultRule;
             return rule != null;
         }
@@ -583,6 +849,11 @@ namespace LongYinFontReplacement
         private static Font ResolveFont(FontReplacementRule rule)
         {
             string cacheKey = $"{Path.GetFullPath(Path.Combine(ConfigDir, rule.SourcePath))}:{rule.AssetName}";
+            if (FailedFontCacheKeys.Contains(cacheKey))
+            {
+                return null;
+            }
+
             if (CachedFonts.TryGetValue(cacheKey, out Font cachedFont))
             {
                 if (cachedFont != null)
@@ -604,6 +875,10 @@ namespace LongYinFontReplacement
                 catch
                 {
                 }
+            }
+            else
+            {
+                FailedFontCacheKeys.Add(cacheKey);
             }
 
             return loadedFont;
@@ -948,6 +1223,11 @@ namespace LongYinFontReplacement
 
         private static string GetUnityFontName(Font font)
         {
+            if (font == null)
+            {
+                return "<null>";
+            }
+
             try
             {
                 return font.name;
@@ -1072,6 +1352,20 @@ namespace LongYinFontReplacement
         [HarmonyPostfix]
         [HarmonyPatch(typeof(Text), "OnEnable")]
         private static void TextOnEnablePostfix(Text __instance)
+        {
+            Main.TryApplyToText(__instance);
+        }
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(Text), "set_text")]
+        private static void TextSetTextPostfix(Text __instance)
+        {
+            Main.TryApplyToText(__instance);
+        }
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(Text), "set_font")]
+        private static void TextSetFontPostfix(Text __instance)
         {
             Main.TryApplyToText(__instance);
         }
