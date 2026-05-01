@@ -61,7 +61,7 @@
         <![CDATA[
           string content = File.ReadAllText(SourceFile);
           var match = Regex.Match(content, @"MelonInfo\(.*?,\s*""[^""]*""\s*,\s*""([^""]+)""");
-          ModVersion = match.Success ? match.Groups[1].Value : "0.1.0";
+          ModVersion = match.Success ? match.Groups[1].Value : "1.0.0";
         ]]>
       </Code>
     </Task>

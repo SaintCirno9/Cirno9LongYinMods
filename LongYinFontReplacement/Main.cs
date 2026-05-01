@@ -14,7 +14,7 @@ using MelonLoader.NativeUtils;
 using UnityEngine;
 using UnityEngine.UI;
 
-[assembly: MelonInfo(typeof(LongYinFontReplacement.Main), "LongYinFontReplacement", "0.1.0", "SaintCirno9", null)]
+[assembly: MelonInfo(typeof(LongYinFontReplacement.Main), "LongYinFontReplacement", "1.0.0", "SaintCirno9", null)]
 [assembly: MelonGame("TppStudio", "LongYinLiZhiZhuan")]
 
 namespace LongYinFontReplacement
@@ -61,8 +61,6 @@ namespace LongYinFontReplacement
         public string Hash { get; }
 
         public string[] FamilyNames { get; }
-
-        public int InjectionCount { get; set; }
     }
 
     public class Main : MelonMod
@@ -421,16 +419,14 @@ namespace LongYinFontReplacement
 
                     if (!font.HasCharacter(character))
                     {
-                        string originalFontName = rule != null ? rule.OriginalFontName : font.name;
-                        WarnOnce($"替换字体缺少字符“{character}”，跳过包含该字符的文本：{originalFontName}");
+                        WarnOnce($"替换字体缺少字符“{character}”，跳过包含该字符的文本：{rule.OriginalFontName}");
                         return false;
                     }
 
                     CharacterInfo characterInfo;
                     if (!font.GetCharacterInfo(character, out characterInfo, fontSize, fontStyle))
                     {
-                        string originalFontName = rule != null ? rule.OriginalFontName : font.name;
-                        WarnOnce($"替换字体无法生成字符“{character}”的字形，跳过包含该字符的文本：{originalFontName}");
+                        WarnOnce($"替换字体无法生成字符“{character}”的字形，跳过包含该字符的文本：{rule.OriginalFontName}");
                         return false;
                     }
                 }
@@ -439,8 +435,7 @@ namespace LongYinFontReplacement
             }
             catch (Exception ex)
             {
-                string originalFontName = rule != null ? rule.OriginalFontName : font.name;
-                WarnOnce($"检查字体字符失败：{originalFontName}，{ex.Message}");
+                WarnOnce($"检查字体字符失败：{rule.OriginalFontName}，{ex.Message}");
                 return false;
             }
         }
@@ -542,17 +537,9 @@ namespace LongYinFontReplacement
 
             try
             {
+                // Unity 会在后续原生加载流程读取这两项，日志只保留失败，避免每个字体实例刷屏。
                 Marshal.WriteIntPtr(fontResource, 0x80, memory.Buffer);
                 Marshal.WriteInt32(fontResource, 0x90, memory.Size);
-                memory.InjectionCount++;
-                if (memory.InjectionCount == 1)
-                {
-                    LOG.Msg($"[字体内存注入] 首次注入已缓存 TTF 内存：fontRes=0x{fontResource.ToInt64():X}，size={memory.Size}，sha256={memory.Hash}");
-                }
-                else
-                {
-                    LOG.Msg($"[字体内存注入] 复用已缓存 TTF 内存：第 {memory.InjectionCount} 次，fontRes=0x{fontResource.ToInt64():X}，size={memory.Size}，sha256={memory.Hash}");
-                }
             }
             catch (Exception ex)
             {
@@ -666,17 +653,15 @@ namespace LongYinFontReplacement
 
                 PreserveRuntimeFont(font);
 
-                string unityFontName = GetUnityFontName(font);
-                string unityFontNames = GetUnityFontNamesText(font);
                 bool probeOk = CanGenerateProbeGlyph(font);
-                LOG.Msg($"创建内存 TTF 动态字体：请求={fontName}，UnityName={unityFontName}，UnityFontNames=[{unityFontNames}]，中文测试字形={(probeOk ? "通过" : "失败")}，sha256={memory.Hash}");
-
                 if (probeOk)
                 {
+                    LOG.Msg($"已创建内存 TTF 动态字体：请求={fontName}，sha256={memory.Hash}");
                     return font;
                 }
             }
 
+            WarnOnce($"内存 TTF 动态字体中文测试字形失败：{memory.SourcePath}");
             return null;
         }
 
@@ -705,7 +690,7 @@ namespace LongYinFontReplacement
             }
 
             byte[] data = File.ReadAllBytes(fontPath);
-            if (data.Length <= 0 || data.Length > int.MaxValue)
+            if (data.Length <= 0)
             {
                 WarnOnce($"TTF 字体文件大小异常：{fontPath}");
                 return null;
@@ -746,11 +731,6 @@ namespace LongYinFontReplacement
             string signature = Encoding.ASCII.GetString(data, 0, 4);
             if (signature == "ttcf")
             {
-                if (data.Length < 12)
-                {
-                    return names;
-                }
-
                 uint fontCount = ReadUInt32BigEndian(data, 8);
                 for (int i = 0; i < fontCount; i++)
                 {
@@ -957,30 +937,6 @@ namespace LongYinFontReplacement
             }
         }
 
-        private static string GetUnityFontNamesText(Font font)
-        {
-            try
-            {
-                Il2CppStringArray names = font.fontNames;
-                if (names == null || names.Length == 0)
-                {
-                    return string.Empty;
-                }
-
-                List<string> values = new List<string>();
-                for (int i = 0; i < names.Length; i++)
-                {
-                    values.Add(names[i]);
-                }
-
-                return string.Join(", ", values);
-            }
-            catch
-            {
-                return "<读取失败>";
-            }
-        }
-
         private static ushort ReadUInt16BigEndian(byte[] data, int offset)
         {
             return (ushort)((data[offset] << 8) | data[offset + 1]);
@@ -1098,6 +1054,5 @@ namespace LongYinFontReplacement
         {
             Main.TryApplyToText(__instance);
         }
-
     }
 }
