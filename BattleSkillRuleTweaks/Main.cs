@@ -1,12 +1,14 @@
 using HarmonyLib;
 using Il2Cpp;
+using Il2CppInterop.Runtime;
 using Il2CppInterop.Runtime.InteropTypes;
 using MelonLoader;
+using MelonLoader.Utils;
 using System;
 using System.Reflection;
 using System.Runtime.InteropServices;
 
-[assembly: MelonInfo(typeof(BattleSkillRuleTweaks.Main), "BattleSkillRuleTweaks", "1.3.0", "SaintCirno9", null)]
+[assembly: MelonInfo(typeof(BattleSkillRuleTweaks.Main), "BattleSkillRuleTweaks", "1.4.0", "SaintCirno9", null)]
 [assembly: MelonGame("TppStudio", "LongYinLiZhiZhuan")]
 
 namespace BattleSkillRuleTweaks
@@ -15,15 +17,70 @@ namespace BattleSkillRuleTweaks
     {
         internal static MelonLogger.Instance Log => Melon<Main>.Logger;
 
-        private const int BattleUnitAttackEndThisOffset = 0x20;
-        private const int BattleControllerNowActiveUnitAttackedOffset = 0x121;
+        private const int KnownBattleControllerIteratorThisOffset = 0x20;
+        private const int KnownBattleControllerNowActiveUnitAttackedOffset = 0x121;
+        private static int BattleControllerIteratorThisOffset = -1;
+        private static int BattleControllerNowActiveUnitAttackedOffset = -1;
+        private static bool BattleControllerIteratorThisOffsetFailed;
+        private static MelonPreferences_Entry<bool> EnableInitialSkillUnlockEntry;
+        private static MelonPreferences_Entry<bool> EnableSkillAfterUseContinuationEntry;
+        private static readonly string ConfigFilePath = $"{MelonEnvironment.UserDataDirectory}\\BattleSkillRuleTweaks.cfg";
         internal static readonly MethodInfo GetAttackRangeGridsMethod = AccessTools.Method(typeof(BattleController), "GetAttackRangeGrids");
+        internal static bool EnableInitialSkillUnlock => EnableInitialSkillUnlockEntry?.Value ?? true;
+        internal static bool EnableSkillAfterUseContinuation => EnableSkillAfterUseContinuationEntry?.Value ?? true;
 
         public override void OnInitializeMelon()
         {
+            MelonPreferences_Category category = MelonPreferences.CreateCategory("BattleSkillRuleTweaks");
+            category.SetFilePath(ConfigFilePath);
+            EnableInitialSkillUnlockEntry = category.CreateEntry("EnableInitialSkillUnlock", true, description: "是否让内功、轻功、绝技在战斗第一回合即可启用。合法值：true / false");
+            EnableSkillAfterUseContinuationEntry = category.CreateEntry("EnableSkillAfterUseContinuation", true, description: "是否让内功、轻功、绝技施放后不直接结束当前回合。合法值：true / false");
+            category.SaveToFile();
+
+            if (!TryInitializeNativeOffsets())
+            {
+                Log.Error("字段偏移检测失败，已禁用技能后继续行动补丁。");
+                return;
+            }
+
             PatchBattleUnitAttackEndMoveNext();
             PatchPlayBattleUnitMoveMoveNext();
             Log.Msg("BattleSkillRuleTweaks 已加载。");
+        }
+
+        private static bool TryInitializeNativeOffsets()
+        {
+            try
+            {
+                IntPtr fieldPtr = IL2CPP.GetIl2CppField(Il2CppClassPointerStore<BattleController>.NativeClassPtr, "nowActiveUnitAttacked");
+                if (fieldPtr == IntPtr.Zero)
+                {
+                    return false;
+                }
+
+                uint offset = IL2CPP.il2cpp_field_get_offset(fieldPtr);
+                if (offset > int.MaxValue)
+                {
+                    return false;
+                }
+
+                BattleControllerNowActiveUnitAttackedOffset = (int)offset;
+                if (BattleControllerNowActiveUnitAttackedOffset != KnownBattleControllerNowActiveUnitAttackedOffset)
+                {
+                    Log.Warning($"检测到 nowActiveUnitAttacked 偏移变化: old=0x{KnownBattleControllerNowActiveUnitAttackedOffset:X}, new=0x{BattleControllerNowActiveUnitAttackedOffset:X}");
+                }
+                else
+                {
+                    Log.Msg($"已检测 nowActiveUnitAttacked 偏移: 0x{BattleControllerNowActiveUnitAttackedOffset:X}");
+                }
+
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Log.Error($"读取 nowActiveUnitAttacked 偏移失败: {ex.Message}");
+                return false;
+            }
         }
 
         private void PatchBattleUnitAttackEndMoveNext()
@@ -36,6 +93,12 @@ namespace BattleSkillRuleTweaks
             {
                 Log.Error("未找到 BattleUnitAttackEnd 协程补丁入口。");
                 LogIteratorTypes();
+                return;
+            }
+
+            if (!TryInitializeIteratorThisOffset(iteratorType))
+            {
+                Log.Error("BattleUnitAttackEnd 协程 this 偏移检测失败，跳过补丁。");
                 return;
             }
 
@@ -52,6 +115,12 @@ namespace BattleSkillRuleTweaks
             {
                 Log.Error("未找到 PlayBattleUnitMove 协程补丁入口。");
                 LogIteratorTypes();
+                return;
+            }
+
+            if (!TryInitializeIteratorThisOffset(iteratorType))
+            {
+                Log.Error("PlayBattleUnitMove 协程 this 偏移检测失败，跳过补丁。");
                 return;
             }
 
@@ -96,7 +165,12 @@ namespace BattleSkillRuleTweaks
                 return null;
             }
 
-            IntPtr controllerPtr = Marshal.ReadIntPtr(IntPtr.Add(iteratorObject.Pointer, BattleUnitAttackEndThisOffset));
+            if (BattleControllerIteratorThisOffset < 0 && !TryInitializeIteratorThisOffset(iteratorObject))
+            {
+                return null;
+            }
+
+            IntPtr controllerPtr = Marshal.ReadIntPtr(IntPtr.Add(iteratorObject.Pointer, BattleControllerIteratorThisOffset));
             if (controllerPtr == IntPtr.Zero)
             {
                 return null;
@@ -105,9 +179,118 @@ namespace BattleSkillRuleTweaks
             return new BattleController(controllerPtr);
         }
 
+        private static bool TryInitializeIteratorThisOffset(Il2CppObjectBase iteratorObject)
+        {
+            if (BattleControllerIteratorThisOffsetFailed)
+            {
+                return false;
+            }
+
+            try
+            {
+                IntPtr classPtr = Marshal.ReadIntPtr(iteratorObject.Pointer);
+                IntPtr fieldPtr = IL2CPP.il2cpp_class_get_field_from_name(classPtr, "<>4__this");
+                if (fieldPtr == IntPtr.Zero)
+                {
+                    BattleControllerIteratorThisOffsetFailed = true;
+                    Log.Error("未找到 BattleController 协程 <>4__this 字段。");
+                    return false;
+                }
+
+                uint offset = IL2CPP.il2cpp_field_get_offset(fieldPtr);
+                if (offset > int.MaxValue)
+                {
+                    BattleControllerIteratorThisOffsetFailed = true;
+                    Log.Error($"BattleController 协程 <>4__this 偏移无效: 0x{offset:X}");
+                    return false;
+                }
+
+                BattleControllerIteratorThisOffset = (int)offset;
+                if (BattleControllerIteratorThisOffset != KnownBattleControllerIteratorThisOffset)
+                {
+                    Log.Warning($"检测到 BattleController 协程 this 偏移变化: old=0x{KnownBattleControllerIteratorThisOffset:X}, new=0x{BattleControllerIteratorThisOffset:X}");
+                }
+                else
+                {
+                    Log.Msg($"已检测 BattleController 协程 this 偏移: 0x{BattleControllerIteratorThisOffset:X}");
+                }
+
+                return true;
+            }
+            catch (Exception ex)
+            {
+                BattleControllerIteratorThisOffsetFailed = true;
+                Log.Error($"读取 BattleController 协程 this 偏移失败: {ex.Message}");
+                return false;
+            }
+        }
+
+        private static bool TryInitializeIteratorThisOffset(Type iteratorType)
+        {
+            if (BattleControllerIteratorThisOffset >= 0)
+            {
+                return true;
+            }
+
+            if (BattleControllerIteratorThisOffsetFailed)
+            {
+                return false;
+            }
+
+            try
+            {
+                FieldInfo thisFieldPtrField = AccessTools.Field(iteratorType, "NativeFieldInfoPtr___4__this");
+                if (thisFieldPtrField == null)
+                {
+                    BattleControllerIteratorThisOffsetFailed = true;
+                    Log.Error($"未找到 {iteratorType.FullName} 的 NativeFieldInfoPtr___4__this 字段。");
+                    return false;
+                }
+
+                IntPtr fieldPtr = (IntPtr)thisFieldPtrField.GetValue(null);
+                if (fieldPtr == IntPtr.Zero)
+                {
+                    BattleControllerIteratorThisOffsetFailed = true;
+                    Log.Error($"{iteratorType.FullName} 的 NativeFieldInfoPtr___4__this 为空。");
+                    return false;
+                }
+
+                return TryInitializeIteratorThisOffset(fieldPtr);
+            }
+            catch (Exception ex)
+            {
+                BattleControllerIteratorThisOffsetFailed = true;
+                Log.Error($"读取 BattleController 协程类型 this 偏移失败: {ex.Message}");
+                return false;
+            }
+        }
+
+        private static bool TryInitializeIteratorThisOffset(IntPtr fieldPtr)
+        {
+            uint offset = IL2CPP.il2cpp_field_get_offset(fieldPtr);
+            if (offset > int.MaxValue)
+            {
+                BattleControllerIteratorThisOffsetFailed = true;
+                Log.Error($"BattleController 协程 <>4__this 偏移无效: 0x{offset:X}");
+                return false;
+            }
+
+            BattleControllerIteratorThisOffset = (int)offset;
+            if (BattleControllerIteratorThisOffset != KnownBattleControllerIteratorThisOffset)
+            {
+                Log.Warning($"检测到 BattleController 协程 this 偏移变化: old=0x{KnownBattleControllerIteratorThisOffset:X}, new=0x{BattleControllerIteratorThisOffset:X}");
+            }
+            else
+            {
+                Log.Msg($"已检测 BattleController 协程 this 偏移: 0x{BattleControllerIteratorThisOffset:X}");
+            }
+
+            return true;
+        }
+
         internal static void SetNowActiveUnitAttacked(BattleController controller, bool value)
         {
-            if (controller == null)
+            if (controller == null || BattleControllerNowActiveUnitAttackedOffset < 0)
             {
                 return;
             }
@@ -117,7 +300,7 @@ namespace BattleSkillRuleTweaks
 
         internal static bool GetNowActiveUnitAttacked(BattleController controller)
         {
-            if (controller == null)
+            if (controller == null || BattleControllerNowActiveUnitAttackedOffset < 0)
             {
                 return false;
             }
@@ -131,7 +314,7 @@ namespace BattleSkillRuleTweaks
     {
         private static void Postfix(HeroData __instance)
         {
-            if (__instance == null)
+            if (__instance == null || !Main.EnableInitialSkillUnlock)
             {
                 return;
             }
@@ -161,7 +344,7 @@ namespace BattleSkillRuleTweaks
     {
         private static void Postfix(HeroData __instance, KungfuSkillLvData targetSkill, ref bool __result)
         {
-            if (__result || __instance == null || !BattleSkillUnlockHelper.IsSupportedSkill(targetSkill))
+            if (__result || __instance == null || !Main.EnableInitialSkillUnlock || !BattleSkillUnlockHelper.IsSupportedSkill(targetSkill))
             {
                 return;
             }
@@ -210,7 +393,7 @@ namespace BattleSkillRuleTweaks
     {
         public static void Postfix(object __instance, bool __result)
         {
-            if (!__result || __instance == null)
+            if (!__result || __instance == null || !Main.EnableSkillAfterUseContinuation)
             {
                 return;
             }
@@ -824,7 +1007,7 @@ namespace BattleSkillRuleTweaks
     {
         public static void Postfix(object __instance, bool __result)
         {
-            if (!__result || __instance == null)
+            if (!__result || __instance == null || !Main.EnableSkillAfterUseContinuation)
             {
                 return;
             }
