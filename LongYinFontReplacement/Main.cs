@@ -128,11 +128,32 @@ namespace LongYinFontReplacement
                 "# 字体文件路径相对 UserData\\LongYinFontReplacement，字体族名可留空自动读取。\r\n" +
                 "# 行距倍率会乘到原组件行距上：1.00=保持原版，1.20=加大 20%，0.80=压缩 20%。原版不同 UI 可能本来就是 1、0.9、0.8 或 0.75。\r\n" +
                 "# 字号倍率会乘到原组件字号上：1.00=保持原版，0.85=缩小 15%。笔画外扩或字面偏大的字体建议 0.80-0.90。\r\n" +
-                "# 当前版本先接管 LTLocalization 的 UnityEngine.UI.Text 链路。\r\n" +
+                "#\r\n" +
+                "# 备用字体准备建议：\r\n" +
+                "# 游戏内置字体种类较多，如需精细覆盖，建议提前准备与原版文件名对应的 ttf/otf 字体文件。\r\n" +
+                "# 文件名不必和原版完全相同，但 override 的“原字体名”要和游戏原字体匹配。\r\n" +
                 "default|Fonts\\庞门正道细线体.ttf||1.00|1.00\r\n" +
-                "# override|字体家AI造字剑客|Fonts\\庞门正道细线体.ttf||1.00|1.00\r\n" +
+                "\r\n" +
+                "# 常用字体用途参考：\r\n" +
+                "# 正文 / 侧边栏任务字体：汇文明朝体\r\n" +
+                "# 标题字体：字体家AI造字剑客\r\n" +
+                "# 剧情 CG 字体：SourceHanSerifCN 系列\r\n" +
+                "# 常规界面显示字体：SourceHanSansCN 系列\r\n" +
+                "\r\n" +
+                "# 全量原版字体覆盖模板，按需取消注释并改成自己的字体文件。\r\n" +
+                "# override|汇文明朝体|Fonts\\庞门正道细线体.ttf||1.00|1.00\r\n" +
                 "# override|SourceHanSerifCN-Bold|Fonts\\庞门正道细线体.ttf||1.00|1.00\r\n" +
-                "# override|LiberationSans|Fonts\\庞门正道细线体.ttf||1.00|1.00\r\n";
+                "# override|SourceHanSerifCN-Medium|Fonts\\庞门正道细线体.ttf||1.00|1.00\r\n" +
+                "# override|SourceHanSansCN-Bold|Fonts\\庞门正道细线体.ttf||1.00|1.00\r\n" +
+                "# override|SourceHanSansCN-Regular|Fonts\\庞门正道细线体.ttf||1.00|1.00\r\n" +
+                "# override|字体家AI造字剑客|Fonts\\庞门正道细线体.ttf||1.00|1.00\r\n" +
+                "# override|字体家AI造字霸牙|Fonts\\庞门正道细线体.ttf||1.00|1.00\r\n" +
+                "# override|LiberationSans|Fonts\\庞门正道细线体.ttf||1.00|1.00\r\n" +
+                "# override|Roboto-Bold|Fonts\\庞门正道细线体.ttf||1.00|1.00\r\n" +
+                "# override|Electromagnetic Highway Sign|Fonts\\庞门正道细线体.ttf||1.00|1.00\r\n" +
+                "# override|Oswald-Bold|Fonts\\庞门正道细线体.ttf||1.00|1.00\r\n" +
+                "# override|Anton|Fonts\\庞门正道细线体.ttf||1.00|1.00\r\n" +
+                "# override|Bangers|Fonts\\庞门正道细线体.ttf||1.00|1.00\r\n";
 
             File.WriteAllText(ConfigPath, sampleConfig);
         }

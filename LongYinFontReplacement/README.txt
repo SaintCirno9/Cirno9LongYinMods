@@ -1,64 +1,130 @@
 《龙胤立志传》字体替换 Mod（LongYinFontReplacement）
 
-【当前定位】
-1. 这是一个独立项目，不依赖也不修改其他现有 Mod。
-2. 当前版本复用游戏 `LTLocalization.CheckTextFont` 这条运行时字体替换链。
-3. 现阶段仅覆盖 `UnityEngine.UI.Text`；`UILabel / UIFont / TMP_Text` 暂未接入。
-4. TTF 会以内存字体方式交给 Unity 加载，不需要把字体安装到系统，也不需要修改原版资源文件。
+【功能】
+1. 替换游戏内常见 UI 文字的字体。
+2. 支持全局通用字体，也支持按原字体名单独覆盖。
+3. 字体文件直接放在 `UserData\LongYinFontReplacement\Fonts`，不需要安装到系统。
+4. 不修改游戏原版资源文件，删除 Mod 后即可回退原版显示。
 
-【工程结构】
-1. `LongYinFontReplacement.csproj`
-   - 参照旁边 `LongYinCustomKungfuSkill` 的 SDK 风格工程。
-2. `Main.cs`
-   - 包含 MelonMod 入口、配置加载、字体解析和 Harmony 补丁。
-3. `README.txt`
-   - 当前使用说明。
-
-【配置目录】
-1. Mod 首次启动后会自动创建：
-   - `UserData\LongYinFontReplacement`
-   - `UserData\LongYinFontReplacement\Fonts`
+【安装】
+1. 将压缩包内容解压到游戏根目录。
+2. 确认文件位置类似下面这样：
+   - `Mods\LongYinFontReplacement.dll`
    - `UserData\LongYinFontReplacement\FontMappings.txt`
+   - `UserData\LongYinFontReplacement\Fonts\庞门正道细线体.ttf`
+3. 启动游戏。如果 `UserData\LongYinFontReplacement` 不存在，Mod 会自动创建默认配置目录。
 
-【配置格式】
-1. `FontMappings.txt` 支持两类规则：
-   - `default|字体文件路径|字体族名|行距倍率|字号倍率`
-   - `override|原字体名|字体文件路径|字体族名|行距倍率|字号倍率`
-2. 参数说明：
-   - `default`：全局通用字体，所有未被 `override` 命中的字体都会使用它
-   - `override`：特定原字体覆盖，只用于需要单独指定字体或行距的原字体名
-   - `字体文件路径`：相对 `UserData\LongYinFontReplacement`，例如 `Fonts\庞门正道细线体.ttf`
-   - `字体族名`：可留空自动读取；如果自动读取失败，再手动填写字体内部族名
-   - `行距倍率`：乘到原组件行距上，`1.00` 表示保持原版；`1.20` 表示加大 20%；`0.80` 表示压缩 20%。原版不同 UI 可能本来就是 `1`、`0.9`、`0.8` 或 `0.75`。
-   - `字号倍率`：乘到原组件字号上，`1.00` 表示保持原版；`0.85` 表示缩小 15%。笔画外扩或字面偏大的字体建议 `0.80-0.90`。
+【配置文件】
+配置文件位置：
+
+```text
+UserData\LongYinFontReplacement\FontMappings.txt
+```
+
+每行一条规则。以 `#` 开头的行是注释，不会生效。
+
+全局通用字体：
+
+```text
+default|字体文件路径|字体族名|行距倍率|字号倍率
+```
+
+特定字体覆盖：
+
+```text
+override|原字体名|字体文件路径|字体族名|行距倍率|字号倍率
+```
+
+【字段说明】
+1. `字体文件路径`
+   - 相对 `UserData\LongYinFontReplacement`。
+   - 例如 `Fonts\庞门正道细线体.ttf`。
+2. `字体族名`
+   - 通常可以留空，Mod 会尝试从 TTF 文件自动读取。
+   - 如果自动读取失败，再填写字体内部族名。
+3. `行距倍率`
+   - 乘到原文字组件的行距上。
+   - `1.00` 保持原版，`1.20` 加大 20%，`0.80` 压缩 20%。
+4. `字号倍率`
+   - 乘到原文字组件的字号上。
+   - `1.00` 保持原版，`0.85` 缩小 15%。
+
+【建议准备的原版字体名】
+游戏内置字体种类较多。如果想尽量完整替换，建议按下面这些原版字体名准备映射。配置里的 `override` 不要求你的字体文件名和原版完全一致，但“原字体名”要和游戏原字体匹配。
+
+中文常用字体：
+
+```text
+汇文明朝体
+SourceHanSerifCN-Bold
+SourceHanSerifCN-Medium
+SourceHanSansCN-Bold
+SourceHanSansCN-Regular
+字体家AI造字剑客
+字体家AI造字霸牙
+```
+
+英文 / 装饰字体：
+
+```text
+LiberationSans
+Roboto-Bold
+Electromagnetic Highway Sign
+Oswald-Bold
+Anton
+Bangers
+```
+
+【常用字体用途】
+1. 正文 / 侧边栏任务字体：`汇文明朝体`
+2. 标题字体：`字体家AI造字剑客`
+3. 剧情 CG 字体：`SourceHanSerifCN` 系列
+4. 常规界面显示字体：`SourceHanSansCN` 系列
 
 【示例】
-1. 全局通用字体：
-   - `default|Fonts\庞门正道细线体.ttf||1.00|1.00`
-2. 特定字体覆盖：
-   - `override|SourceHanSerifCN-Bold|Fonts\SerifFont.ttf|SerifFont|1.00|1.00`
-3. 可注释保留的覆盖模板：
-   - `# override|字体家AI造字剑客|Fonts\庞门正道细线体.ttf||1.00|1.00`
-   - `# override|SourceHanSerifCN-Bold|Fonts\庞门正道细线体.ttf||1.00|1.00`
-   - `# override|LiberationSans|Fonts\庞门正道细线体.ttf||1.00|1.00`
+全局替换为默认字体：
 
-【当前补丁点】
-1. `LTLocalization.CheckTextFont`
-   - 前置接管，命中自定义映射时直接替换字体。
-2. `LTLocalization.AddText`
-   - 后置补一次，避免追加文本后漏替换。
-3. `LTLocalization.Init`
-   - 初始化完成后批量扫描一次已加载文本。
-4. `LTLocalization.ManualSetLanguage`
-   - 切语言后重新扫描一次。
-5. `OnSceneWasInitialized`
-   - 场景初始化后批量扫描一次。
+```text
+default|Fonts\庞门正道细线体.ttf||1.00|1.00
+```
 
-【与 PDF 教程的区别】
-1. PDF 方案是直接修改 `resources.assets` 内的 `Font` 资源。
-2. 当前工程是不改原版资源文件，而是在运行时接管字体替换流程，并把外部 TTF 注入到 Unity 动态字体的内存加载路径。
-3. 优点是回退方便、维护成本低；缺点是当前还不是全字体系统覆盖。
+只给某个原字体单独指定替换字体：
 
-【后续建议】
-1. 第二阶段接入 `UILabel / UIFont / NGUIFont`。
-2. 第三阶段接入 `TMP_Text / TMP_FontAsset`。
+```text
+override|SourceHanSerifCN-Bold|Fonts\SerifFont.ttf|SerifFont|1.00|1.00
+```
+
+字体偏大时缩小字号：
+
+```text
+default|Fonts\庞门正道细线体.ttf||1.00|0.85
+```
+
+文字行距太挤时增大行距：
+
+```text
+default|Fonts\庞门正道细线体.ttf||1.20|1.00
+```
+
+按原版字体名单独覆盖：
+
+```text
+override|汇文明朝体|Fonts\庞门正道细线体.ttf||1.00|1.00
+override|SourceHanSerifCN-Bold|Fonts\庞门正道细线体.ttf||1.00|1.00
+override|SourceHanSansCN-Regular|Fonts\庞门正道细线体.ttf||1.00|1.00
+override|字体家AI造字剑客|Fonts\庞门正道细线体.ttf||1.00|1.00
+override|LiberationSans|Fonts\庞门正道细线体.ttf||1.00|1.00
+```
+
+【常见问题】
+1. 字体没有变化
+   - 确认 DLL 在 `Mods` 目录下。
+   - 确认 TTF 文件路径和 `FontMappings.txt` 里的路径一致。
+   - 查看 `MelonLoader\Latest.log` 是否有 `LongYinFontReplacement 已加载`。
+2. 有些文字没有替换
+   - 当前版本主要覆盖常见 UI 文字，并不保证覆盖所有字体系统。
+3. 文字缺字或显示异常
+   - 换一个包含完整中文字符的 TTF 字体。
+   - 如果字体字面偏大，优先把字号倍率调到 `0.80-0.90`。
+4. 想恢复原版字体
+   - 删除 `Mods\LongYinFontReplacement.dll`，或暂时移走该文件。
