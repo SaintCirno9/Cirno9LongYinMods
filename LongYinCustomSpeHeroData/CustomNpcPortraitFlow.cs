@@ -11,6 +11,8 @@ namespace LongYinCustomSpeHeroData
         private const string StaticPortraitObjectName = "LongYinCustomNpcPortrait";
         private const string StaticPortraitContentObjectName = "Content";
         private const string PlayerStaticPortraitObjectName = "PlayerSpeStaticPortrait";
+        private const float BaseReferenceRectWidth = 507.03943f;
+        private const float BaseReferenceRectHeight = 784.4206f;
 
         internal static bool TryApplyCustomPortrait(HeroData heroData, Transform targetSkeletonParent)
         {
@@ -256,101 +258,46 @@ namespace LongYinCustomSpeHeroData
             contentImage.color = Color.white;
             contentImage.enabled = true;
 
-            if (IsHeroDetailContext(targetSkeletonParent))
-            {
-                EnsureRootMask(portraitRect, enabled: true);
-                contentImage.preserveAspect = false;
-                ApplyHeroDetailContentSize(heroData, portraitRect, contentRect, sprite);
-                return;
-            }
-
-            if (IsCardPortraitContext(targetSkeletonParent))
-            {
-                EnsureRootMask(portraitRect, enabled: true);
-                contentImage.preserveAspect = false;
-                ApplyCardContentSize(heroData, portraitRect, contentRect, sprite);
-                return;
-            }
-
-            EnsureRootMask(portraitRect, enabled: false);
-            contentImage.preserveAspect = true;
-            ApplyFallbackContentSize(heroData, portraitRect, contentRect, sprite);
+            EnsureRootMask(portraitRect, enabled: CanUseRootMask(portraitRect) && !IsDialoguePortraitContext(targetSkeletonParent));
+            contentImage.preserveAspect = false;
+            ApplyPortraitContentSize(heroData, targetSkeletonParent, portraitRect, contentRect, sprite);
         }
 
-        private static void ApplyHeroDetailContentSize(HeroData heroData, RectTransform portraitRect, RectTransform contentRect, Sprite sprite)
+        private static void ApplyPortraitContentSize(HeroData heroData, Transform targetSkeletonParent, RectTransform portraitRect, RectTransform contentRect, Sprite sprite)
         {
-            float frameWidth = Mathf.Max(1f, Mathf.Abs(portraitRect.rect.width));
-            float frameHeight = Mathf.Max(1f, Mathf.Abs(portraitRect.rect.height));
+            PortraitSceneLayoutOverride sceneLayout = GetSceneLayoutOverride(heroData, SceneKind.Fallback);
+            if (IsBattleNowActiveHeroContext(targetSkeletonParent))
+            {
+                sceneLayout = GetSceneLayoutOverride(heroData, SceneKind.BattlePortrait);
+            }
+            else if (IsBattleTeamHeroIconContext(targetSkeletonParent))
+            {
+                sceneLayout = GetSceneLayoutOverride(heroData, SceneKind.BattleCard);
+            }
+            else if (IsHeroDetailContext(targetSkeletonParent))
+            {
+                sceneLayout = GetSceneLayoutOverride(heroData, SceneKind.HeroDetail);
+            }
+            else if (IsCardPortraitContext(targetSkeletonParent))
+            {
+                sceneLayout = GetSceneLayoutOverride(heroData, SceneKind.Card);
+            }
+
+            Vector2 frameSize = GetContentFrameSize(targetSkeletonParent, portraitRect);
+            float frameWidth = frameSize.x;
+            float frameHeight = frameSize.y;
             float spriteWidth = Mathf.Max(1f, sprite.rect.width);
             float spriteHeight = Mathf.Max(1f, sprite.rect.height);
             float coverScale = Mathf.Max(frameWidth / spriteWidth, frameHeight / spriteHeight);
-            PortraitSceneLayoutOverride sceneLayout = GetSceneLayoutOverride(heroData, SceneKind.HeroDetail);
             float scaleMultiplier = sceneLayout.ScaleMultiplier ?? 1f;
             Vector2 coveredSize = new Vector2(spriteWidth * coverScale, spriteHeight * coverScale) * scaleMultiplier;
-            float offsetX = sceneLayout.OffsetX ?? 0f;
-            float offsetY = sceneLayout.OffsetY ?? -90f;
-
-            contentRect.anchorMin = new Vector2(0.5f, 1f);
-            contentRect.anchorMax = new Vector2(0.5f, 1f);
-            contentRect.pivot = new Vector2(0.5f, 1f);
-            contentRect.sizeDelta = coveredSize;
-            contentRect.anchoredPosition3D = new Vector3(offsetX, offsetY, 0f);
-            contentRect.localScale = Vector3.one;
-            contentRect.localRotation = Quaternion.identity;
-        }
-
-        private static void ApplyCardContentSize(HeroData heroData, RectTransform portraitRect, RectTransform contentRect, Sprite sprite)
-        {
-            float frameWidth = Mathf.Max(1f, Mathf.Abs(portraitRect.rect.width));
-            float frameHeight = Mathf.Max(1f, Mathf.Abs(portraitRect.rect.height));
-            float spriteWidth = Mathf.Max(1f, sprite.rect.width);
-            float spriteHeight = Mathf.Max(1f, sprite.rect.height);
-            float coverScale = Mathf.Max(frameWidth / spriteWidth, frameHeight / spriteHeight);
-            PortraitSceneLayoutOverride sceneLayout = GetSceneLayoutOverride(heroData, SceneKind.Card);
-            float insetRatio = sceneLayout.ScaleMultiplier ?? 0.9f;
-            float offsetX = sceneLayout.OffsetX ?? -10f;
-            float offsetY = sceneLayout.OffsetY ?? -20f;
-            Vector2 coveredSize = new Vector2(spriteWidth * coverScale, spriteHeight * coverScale) * insetRatio;
 
             contentRect.anchorMin = new Vector2(0.5f, 0.5f);
             contentRect.anchorMax = new Vector2(0.5f, 0.5f);
             contentRect.pivot = new Vector2(0.5f, 0.5f);
             contentRect.sizeDelta = coveredSize;
-            contentRect.anchoredPosition3D = new Vector3(offsetX, offsetY, 0f);
-            contentRect.localScale = Vector3.one;
-            contentRect.localRotation = Quaternion.identity;
-        }
-
-        private static void ApplyFallbackContentSize(HeroData heroData, RectTransform portraitRect, RectTransform contentRect, Sprite sprite)
-        {
-            PortraitSceneLayoutOverride sceneLayout = GetSceneLayoutOverride(heroData, SceneKind.Fallback);
-            if (sceneLayout.ScaleMultiplier.HasValue || sceneLayout.OffsetX.HasValue || sceneLayout.OffsetY.HasValue)
-            {
-                float frameWidth = Mathf.Max(1f, Mathf.Abs(portraitRect.rect.width));
-                float frameHeight = Mathf.Max(1f, Mathf.Abs(portraitRect.rect.height));
-                float spriteWidth = Mathf.Max(1f, sprite.rect.width);
-                float spriteHeight = Mathf.Max(1f, sprite.rect.height);
-                float fitScale = Mathf.Min(frameWidth / spriteWidth, frameHeight / spriteHeight);
-                float scaleMultiplier = sceneLayout.ScaleMultiplier ?? 1f;
-                Vector2 fittedSize = new Vector2(spriteWidth * fitScale, spriteHeight * fitScale) * scaleMultiplier;
-
-                contentRect.anchorMin = new Vector2(0.5f, 0.5f);
-                contentRect.anchorMax = new Vector2(0.5f, 0.5f);
-                contentRect.pivot = new Vector2(0.5f, 0.5f);
-                contentRect.sizeDelta = fittedSize;
-                contentRect.anchoredPosition3D = new Vector3(sceneLayout.OffsetX ?? 0f, sceneLayout.OffsetY ?? 0f, 0f);
-                contentRect.localScale = Vector3.one;
-                contentRect.localRotation = Quaternion.identity;
-                return;
-            }
-
-            contentRect.anchorMin = Vector2.zero;
-            contentRect.anchorMax = Vector2.one;
-            contentRect.pivot = new Vector2(0.5f, 0.5f);
-            contentRect.offsetMin = Vector2.zero;
-            contentRect.offsetMax = Vector2.zero;
-            contentRect.anchoredPosition3D = Vector3.zero;
-            contentRect.localScale = Vector3.one;
+            contentRect.anchoredPosition3D = GetAutoAdjustedOffset(targetSkeletonParent, portraitRect, sceneLayout);
+            contentRect.localScale = ShouldMirrorToLeftFacing(targetSkeletonParent) ? new Vector3(-1f, 1f, 1f) : Vector3.one;
             contentRect.localRotation = Quaternion.identity;
         }
 
@@ -363,29 +310,106 @@ namespace LongYinCustomSpeHeroData
 
             return sceneKind switch
             {
-                SceneKind.HeroDetail => MergeLayout(config.Fallback, config.HeroDetail),
-                SceneKind.Card => MergeLayout(config.Fallback, config.Card),
+                SceneKind.HeroDetail => config.Fallback.ApplyAdjustment(config.HeroDetail),
+                SceneKind.Card => config.Fallback.ApplyAdjustment(config.Card),
+                SceneKind.BattleCard => config.Fallback.ApplyAdjustment(config.BattleCard),
+                SceneKind.BattlePortrait => config.Fallback.ApplyAdjustment(config.BattlePortrait),
                 _ => config.Fallback
             };
         }
 
-        private static PortraitSceneLayoutOverride MergeLayout(PortraitSceneLayoutOverride fallback, PortraitSceneLayoutOverride sceneSpecific)
+        private static Vector3 GetAutoAdjustedOffset(Transform targetSkeletonParent, RectTransform portraitRect, PortraitSceneLayoutOverride sceneLayout)
         {
-            return new PortraitSceneLayoutOverride(
-                sceneSpecific?.ScaleMultiplier ?? fallback?.ScaleMultiplier,
-                sceneSpecific?.OffsetX ?? fallback?.OffsetX,
-                sceneSpecific?.OffsetY ?? fallback?.OffsetY);
+            float referenceHeight = GetOffsetReferenceHeight(targetSkeletonParent, portraitRect);
+            float heightRatio = referenceHeight / BaseReferenceRectHeight;
+            return new Vector3((sceneLayout.OffsetX ?? 0f) * heightRatio, (sceneLayout.OffsetY ?? 0f) * heightRatio, 0f);
+        }
+
+        private static Vector2 GetContentFrameSize(Transform targetSkeletonParent, RectTransform portraitRect)
+        {
+            return GetLayoutReferenceSize(targetSkeletonParent, portraitRect);
+        }
+
+        private static float GetOffsetReferenceHeight(Transform targetSkeletonParent, RectTransform portraitRect)
+        {
+            RectTransform targetRect = targetSkeletonParent != null ? targetSkeletonParent.TryCast<RectTransform>() : null;
+            if (IsHeroIconContext(targetSkeletonParent) && targetRect != null)
+            {
+                return IsBattleTeamHeroIconContext(targetSkeletonParent)
+                    ? 150f
+                    : Mathf.Max(1f, Mathf.Abs(targetRect.rect.height));
+            }
+
+            return GetLayoutReferenceSize(targetSkeletonParent, portraitRect).y;
+        }
+
+        private static Vector2 GetLayoutReferenceSize(Transform targetSkeletonParent, RectTransform portraitRect)
+        {
+            Vector2 referenceSize = GetReferenceRectSize(portraitRect);
+            if (!IsBattleNowActiveHeroContext(targetSkeletonParent))
+            {
+                return referenceSize;
+            }
+
+            return new Vector2(
+                Mathf.Min(referenceSize.x, BaseReferenceRectWidth),
+                Mathf.Min(referenceSize.y, BaseReferenceRectHeight));
+        }
+
+        private static bool ShouldMirrorToLeftFacing(Transform targetSkeletonParent)
+        {
+            if (targetSkeletonParent == null)
+            {
+                return false;
+            }
+
+            string path = Main.BuildTransformPath(targetSkeletonParent);
+            return path.Contains("/HudPanel/FaceMask/Face", StringComparison.Ordinal) ||
+                   path.Contains("/HeroDetailPanel/Face", StringComparison.Ordinal) ||
+                   path.EndsWith("/BattleUIPanel/NowActiveHero/HeroSkeleton", StringComparison.Ordinal);
+        }
+
+        private static bool IsDialoguePortraitContext(Transform targetSkeletonParent)
+        {
+            if (targetSkeletonParent == null)
+            {
+                return false;
+            }
+
+            string path = Main.BuildTransformPath(targetSkeletonParent);
+            return path.Contains("/PlotPanel/", StringComparison.Ordinal) ||
+                   path.Contains("/TalkPanel/", StringComparison.Ordinal) ||
+                   path.Contains("/HeroTalkUIPanel/", StringComparison.Ordinal);
+        }
+
+        private static Vector2 GetReferenceRectSize(RectTransform portraitRect)
+        {
+            if (portraitRect == null)
+            {
+                return Vector2.one;
+            }
+
+            return new Vector2(
+                Mathf.Max(1f, Mathf.Abs(portraitRect.rect.width)),
+                Mathf.Max(1f, Mathf.Abs(portraitRect.rect.height)));
         }
 
         private enum SceneKind
         {
             HeroDetail,
             Card,
+            BattleCard,
+            BattlePortrait,
             Fallback
         }
 
         private static void EnsureRootMask(RectTransform portraitRect, bool enabled)
         {
+            if (portraitRect == null)
+            {
+                return;
+            }
+
             RectMask2D mask = portraitRect.GetComponent<RectMask2D>();
             if (enabled)
             {
@@ -404,43 +428,62 @@ namespace LongYinCustomSpeHeroData
             }
         }
 
+        private static bool CanUseRootMask(RectTransform portraitRect)
+        {
+            if (portraitRect == null)
+            {
+                return false;
+            }
+
+            Vector3 scale = portraitRect.localScale;
+            return scale.x > 0f && scale.y > 0f;
+        }
+
         private static bool IsHeroDetailContext(Transform targetSkeletonParent)
         {
-            return targetSkeletonParent != null &&
-                   string.Equals(targetSkeletonParent.gameObject.name, "Face", StringComparison.Ordinal) &&
-                   targetSkeletonParent.parent != null &&
-                   string.Equals(targetSkeletonParent.parent.gameObject.name, "HeroDetailPanel", StringComparison.Ordinal);
+            if (targetSkeletonParent == null)
+            {
+                return false;
+            }
+
+            return Main.BuildTransformPath(targetSkeletonParent).Contains("/HeroDetailPanel/Face", StringComparison.Ordinal);
         }
 
         private static bool IsCardPortraitContext(Transform targetSkeletonParent)
         {
-            if (targetSkeletonParent == null || !string.Equals(targetSkeletonParent.gameObject.name, "Back", StringComparison.Ordinal))
+            return IsHeroIconContext(targetSkeletonParent);
+        }
+
+        private static bool IsHeroIconContext(Transform targetSkeletonParent)
+        {
+            if (targetSkeletonParent == null)
             {
                 return false;
             }
 
-            RectTransform rectTransform = targetSkeletonParent.TryCast<RectTransform>();
-            if (rectTransform == null)
+            return Main.BuildTransformPath(targetSkeletonParent).EndsWith("/HeroIcon(Clone)/Back", StringComparison.Ordinal);
+        }
+
+        private static bool IsBattleTeamHeroIconContext(Transform targetSkeletonParent)
+        {
+            if (targetSkeletonParent == null)
             {
                 return false;
             }
 
-            float width = Mathf.Abs(rectTransform.rect.width);
-            float height = Mathf.Abs(rectTransform.rect.height);
-            if (!(width > 0f && width <= 180f && height > 0f && height <= 220f))
+            string path = Main.BuildTransformPath(targetSkeletonParent);
+            return path.Contains("/BattleTeamHeroIcon(Clone)/", StringComparison.Ordinal) &&
+                   path.EndsWith("/HeroIcon(Clone)/Back", StringComparison.Ordinal);
+        }
+
+        private static bool IsBattleNowActiveHeroContext(Transform targetSkeletonParent)
+        {
+            if (targetSkeletonParent == null)
             {
                 return false;
             }
 
-            Transform cardRoot = targetSkeletonParent.parent;
-            Transform content = cardRoot != null ? cardRoot.parent : null;
-            Transform viewport = content != null ? content.parent : null;
-
-            return cardRoot != null &&
-                   content != null &&
-                   viewport != null &&
-                   string.Equals(content.gameObject.name, "Content", StringComparison.Ordinal) &&
-                   string.Equals(viewport.gameObject.name, "Viewport", StringComparison.Ordinal);
+            return Main.BuildTransformPath(targetSkeletonParent).EndsWith("/BattleUIPanel/NowActiveHero/HeroSkeleton", StringComparison.Ordinal);
         }
 
     }

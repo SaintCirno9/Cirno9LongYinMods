@@ -102,7 +102,7 @@ namespace LongYinCustomSpeHeroData
 
         private const string SpeHeroHeader = "id,名字,性别,门派,武学流派,等级,实力等级,性格,资质,年龄,立场,擅长武学,擅长技艺,绝学,标签,绰号,隐藏,出师角色,关系设定,皮肤ID,特殊skeleton";
         private const string SpeHeroFaceHeader = "id,名字,脸,眼,眉,发,嘴,鼻,发后,男胡,杂";
-        private const string PortraitLayoutHeader = "id,详情缩放,详情偏移X,详情偏移Y,卡片缩放,卡片偏移X,卡片偏移Y,通用缩放,通用偏移X,通用偏移Y";
+        private const string PortraitLayoutHeader = "id,通用缩放,通用偏移X,通用偏移Y,详情缩放,详情偏移X,详情偏移Y,卡片缩放,卡片偏移X,卡片偏移Y,战斗卡片缩放,战斗卡片偏移X,战斗卡片偏移Y,战斗立绘缩放,战斗立绘偏移X,战斗立绘偏移Y";
         private const string DefaultModConfigText =
             "# 是否允许所有特殊人物可招募\r\n" +
             "# true=允许，false=保持游戏原版逻辑\r\n" +
@@ -118,7 +118,7 @@ namespace LongYinCustomSpeHeroData
 
         private static readonly string DefaultPortraitLayoutCsv =
             PortraitLayoutHeader + "\r\n" +
-            "171,1.00,0,-90,0.90,-10,-20,1.00,0,0\r\n";
+            "171,1.00,20,-120,1.00,0,0,1.00,0,0,1.00,0,0,1.00,0,0\r\n";
 
         private static LoadedConfigData _cachedSpeHeroConfig = LoadedConfigData.Empty;
         private static LoadedConfigData _cachedSpeHeroFaceConfig = LoadedConfigData.Empty;
@@ -134,6 +134,7 @@ namespace LongYinCustomSpeHeroData
         private static readonly Dictionary<int, PortraitSpriteCacheEntry> CachedPortraitSpritesByHeroId = new();
         private static readonly HashSet<string> PortraitWarnings = new(StringComparer.OrdinalIgnoreCase);
         private static readonly HashSet<int> PortraitAppliedLogHeroIds = new();
+        private static readonly HashSet<string> CsvWriteWarnings = new(StringComparer.OrdinalIgnoreCase);
         private static bool _legacyStructureWarningShown;
 
         public static readonly MelonLogger.Instance LOG = Melon<Main>.Logger;
@@ -236,7 +237,7 @@ namespace LongYinCustomSpeHeroData
 
             if (File.Exists(LegacyPortraitLayoutConfigPath))
             {
-                EnsureCsvHeaderExists(LegacyPortraitLayoutConfigPath, PortraitLayoutHeader);
+                EnsurePortraitLayoutHeaderExists(LegacyPortraitLayoutConfigPath);
             }
 
             if (!Directory.Exists(DataDir))
@@ -267,16 +268,104 @@ namespace LongYinCustomSpeHeroData
                 string portraitLayoutPath = Path.Combine(dir, PortraitLayoutFileName);
                 if (File.Exists(portraitLayoutPath))
                 {
-                    EnsureCsvHeaderExists(portraitLayoutPath, PortraitLayoutHeader);
+                    EnsurePortraitLayoutHeaderExists(portraitLayoutPath);
                 }
             }
+        }
+
+        private static void EnsurePortraitLayoutHeaderExists(string path)
+        {
+            try
+            {
+                string content = ReadAllTextShared(path);
+                string normalized = content.TrimStart('\uFEFF', '\r', '\n');
+                string[] lines = normalized.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None);
+                if (lines.Length == 0 || string.IsNullOrWhiteSpace(lines[0]))
+                {
+                    if (TryWriteAllTextUtf8(path, PortraitLayoutHeader + "\r\n" + normalized))
+                    {
+                        LOG.Warning($"检测到 CSV 表头缺失，已自动修复：{path}");
+                    }
+
+                    return;
+                }
+
+                string[] sourceHeaders = SplitCsvLine(lines[0]);
+                for (int i = 0; i < sourceHeaders.Length; i++)
+                {
+                    sourceHeaders[i] = sourceHeaders[i].Trim('\uFEFF', ' ', '\t');
+                }
+
+                if (FindColumnIndex(sourceHeaders, "id") < 0)
+                {
+                    if (TryWriteAllTextUtf8(path, PortraitLayoutHeader + "\r\n" + normalized))
+                    {
+                        LOG.Warning($"检测到 CSV 表头缺失，已自动修复：{path}");
+                    }
+
+                    return;
+                }
+
+                if (string.Equals(lines[0].Trim('\uFEFF'), PortraitLayoutHeader, StringComparison.Ordinal))
+                {
+                    return;
+                }
+
+                string[] canonicalHeaders = SplitCsvLine(PortraitLayoutHeader);
+                var outputLines = new List<string> { PortraitLayoutHeader };
+                for (int i = 1; i < lines.Length; i++)
+                {
+                    string line = lines[i];
+                    if (string.IsNullOrWhiteSpace(line) || line.TrimStart().StartsWith("#", StringComparison.Ordinal))
+                    {
+                        outputLines.Add(line);
+                        continue;
+                    }
+
+                    string[] sourceCells = SplitCsvLine(line);
+                    string[] normalizedCells = new string[canonicalHeaders.Length];
+                    for (int j = 0; j < canonicalHeaders.Length; j++)
+                    {
+                        int sourceIndex = FindColumnIndex(sourceHeaders, canonicalHeaders[j]);
+                        normalizedCells[j] = sourceIndex >= 0
+                            ? GetCell(sourceCells, sourceIndex)
+                            : GetDefaultPortraitLayoutCell(canonicalHeaders[j]);
+                    }
+
+                    outputLines.Add(BuildCsvLine(normalizedCells));
+                }
+
+                if (TryWriteAllTextUtf8(path, string.Join("\r\n", outputLines) + "\r\n"))
+                {
+                    LOG.Warning($"已同步立绘布局 CSV 表头顺序：{path}");
+                }
+            }
+            catch (Exception ex)
+            {
+                LOG.Warning($"自动修复立绘布局 CSV 表头失败：{path}，{ex.GetType().Name} - {ex.Message}");
+            }
+        }
+
+        private static string GetDefaultPortraitLayoutCell(string header)
+        {
+            if (header.EndsWith("缩放", StringComparison.Ordinal))
+            {
+                return "1.00";
+            }
+
+            if (header.Contains("偏移", StringComparison.Ordinal))
+            {
+                return "0";
+            }
+
+            return string.Empty;
         }
 
         internal static void EnsureCsvHeaderExists(string path, string header)
         {
             try
             {
-                string content = File.ReadAllText(path);
+                string content = ReadAllTextShared(path);
                 string normalized = content.TrimStart('\uFEFF', '\r', '\n');
                 if (normalized.StartsWith(header, StringComparison.Ordinal))
                 {
@@ -284,8 +373,10 @@ namespace LongYinCustomSpeHeroData
                 }
 
                 string fixedContent = header + "\r\n" + normalized;
-                File.WriteAllText(path, fixedContent, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
-                LOG.Warning($"检测到 CSV 表头缺失，已自动修复：{path}");
+                if (TryWriteAllTextUtf8(path, fixedContent))
+                {
+                    LOG.Warning($"检测到 CSV 表头缺失，已自动修复：{path}");
+                }
             }
             catch (Exception ex)
             {
@@ -702,6 +793,8 @@ namespace LongYinCustomSpeHeroData
             return new PortraitLayoutConfig(
                 BuildPortraitSceneLayoutOverride(headers, cells, "详情"),
                 BuildPortraitSceneLayoutOverride(headers, cells, "卡片"),
+                BuildPortraitSceneLayoutOverride(headers, cells, "战斗卡片"),
+                BuildPortraitSceneLayoutOverride(headers, cells, "战斗立绘"),
                 BuildPortraitSceneLayoutOverride(headers, cells, "通用"));
         }
 
@@ -1262,6 +1355,11 @@ namespace LongYinCustomSpeHeroData
 
         private static string[] ReadAllLinesShared(string path, int maxAttempts = 5)
         {
+            return ReadAllTextShared(path, maxAttempts).Split(new[] { "\r\n", "\n" }, StringSplitOptions.None);
+        }
+
+        private static string ReadAllTextShared(string path, int maxAttempts = 5)
+        {
             for (int attempt = 1; attempt <= maxAttempts; attempt++)
             {
                 try
@@ -1277,14 +1375,12 @@ namespace LongYinCustomSpeHeroData
                     try
                     {
                         Encoding strictUtf8 = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);
-                        string textUtf8 = strictUtf8.GetString(bytes);
-                        return textUtf8.Replace("\uFEFF", "").Split(new[] { "\r\n", "\n" }, StringSplitOptions.None);
+                        return strictUtf8.GetString(bytes).Replace("\uFEFF", "");
                     }
                     catch (DecoderFallbackException)
                     {
                         LOG.Warning($"[{Path.GetFileName(path)}] 不符合标准 UTF-8 编码，已启动 GBK 容错解析。");
-                        string textGbk = Encoding.GetEncoding("gbk").GetString(bytes);
-                        return textGbk.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None);
+                        return Encoding.GetEncoding("gbk").GetString(bytes);
                     }
                 }
                 catch (IOException) when (attempt < maxAttempts)
@@ -1295,7 +1391,25 @@ namespace LongYinCustomSpeHeroData
 
             using var finalStream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
             using var reader = new StreamReader(finalStream, Encoding.UTF8);
-            return reader.ReadToEnd().Split(new[] { "\r\n", "\n" }, StringSplitOptions.None);
+            return reader.ReadToEnd();
+        }
+
+        private static bool TryWriteAllTextUtf8(string path, string content)
+        {
+            try
+            {
+                File.WriteAllText(path, content, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
+                return true;
+            }
+            catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException)
+            {
+                if (CsvWriteWarnings.Add(path))
+                {
+                    LOG.Warning($"CSV 文件当前可能被 Excel 占用，已跳过自动写回：{path}，{ex.GetType().Name} - {ex.Message}");
+                }
+
+                return false;
+            }
         }
     }
 

@@ -108,6 +108,14 @@ namespace LongYinCustomSpeHeroData
         public float? OffsetX { get; }
 
         public float? OffsetY { get; }
+
+        public PortraitSceneLayoutOverride ApplyAdjustment(PortraitSceneLayoutOverride adjustment)
+        {
+            float scaleMultiplier = (ScaleMultiplier ?? 1f) * (adjustment?.ScaleMultiplier ?? 1f);
+            float offsetX = (OffsetX ?? 0f) + (adjustment?.OffsetX ?? 0f);
+            float offsetY = (OffsetY ?? 0f) + (adjustment?.OffsetY ?? 0f);
+            return new PortraitSceneLayoutOverride(scaleMultiplier, offsetX, offsetY);
+        }
     }
 
     internal sealed class PortraitLayoutConfig
@@ -115,16 +123,24 @@ namespace LongYinCustomSpeHeroData
         public PortraitLayoutConfig(
             PortraitSceneLayoutOverride heroDetail,
             PortraitSceneLayoutOverride card,
+            PortraitSceneLayoutOverride battleCard,
+            PortraitSceneLayoutOverride battlePortrait,
             PortraitSceneLayoutOverride fallback)
         {
             HeroDetail = heroDetail ?? new PortraitSceneLayoutOverride(null, null, null);
             Card = card ?? new PortraitSceneLayoutOverride(null, null, null);
+            BattleCard = battleCard ?? new PortraitSceneLayoutOverride(null, null, null);
+            BattlePortrait = battlePortrait ?? new PortraitSceneLayoutOverride(null, null, null);
             Fallback = fallback ?? new PortraitSceneLayoutOverride(null, null, null);
         }
 
         public PortraitSceneLayoutOverride HeroDetail { get; }
 
         public PortraitSceneLayoutOverride Card { get; }
+
+        public PortraitSceneLayoutOverride BattleCard { get; }
+
+        public PortraitSceneLayoutOverride BattlePortrait { get; }
 
         public PortraitSceneLayoutOverride Fallback { get; }
     }
