@@ -11,7 +11,7 @@ using Il2CppInterop.Runtime;
 using MelonLoader;
 using UnityEngine;
 
-[assembly: MelonInfo(typeof(LongYinCustomSpeHeroData.Main), "LongYinCustomSpeHeroData", "2.1.0", "SaintCirno9", null)]
+[assembly: MelonInfo(typeof(LongYinCustomSpeHeroData.Main), "LongYinCustomSpeHeroData", "2.2.0", "SaintCirno9", null)]
 [assembly: MelonGame("TppStudio", "LongYinLiZhiZhuan")]
 
 namespace LongYinCustomSpeHeroData
@@ -22,23 +22,17 @@ namespace LongYinCustomSpeHeroData
             false,
             string.Empty,
             0,
-            new Dictionary<int, PortraitBindingInfo>(),
-            new Dictionary<string, PortraitBindingInfo>(StringComparer.OrdinalIgnoreCase),
             string.Empty);
 
         public LoadedConfigData(
             bool valid,
             string csvText,
             int rowCount,
-            Dictionary<int, PortraitBindingInfo> bindingsByHeroId,
-            Dictionary<string, PortraitBindingInfo> bindingsByNormalizedName,
             string cacheSignature)
         {
             Valid = valid;
             CsvText = csvText ?? string.Empty;
             RowCount = rowCount;
-            BindingsByHeroId = bindingsByHeroId ?? new Dictionary<int, PortraitBindingInfo>();
-            BindingsByNormalizedName = bindingsByNormalizedName ?? new Dictionary<string, PortraitBindingInfo>(StringComparer.OrdinalIgnoreCase);
             CacheSignature = cacheSignature ?? string.Empty;
         }
 
@@ -47,10 +41,6 @@ namespace LongYinCustomSpeHeroData
         public string CsvText { get; }
 
         public int RowCount { get; }
-
-        public Dictionary<int, PortraitBindingInfo> BindingsByHeroId { get; }
-
-        public Dictionary<string, PortraitBindingInfo> BindingsByNormalizedName { get; }
 
         public string CacheSignature { get; }
     }
@@ -99,14 +89,20 @@ namespace LongYinCustomSpeHeroData
         private const string SpeHeroResourcePath = "GameData/SpeHeroData";
         private const string SpeHeroFaceResourcePath = "GameData/SpeHeroFaceData";
         private const string RecruitAllSpeHeroesConfigKey = "EnableRecruitAllSpeHeroes";
+        private const string VerboseLogConfigKey = "EnableVerboseLog";
 
         private const string SpeHeroHeader = "id,名字,性别,门派,武学流派,等级,实力等级,性格,资质,年龄,立场,擅长武学,擅长技艺,绝学,标签,绰号,隐藏,出师角色,关系设定,皮肤ID,特殊skeleton";
         private const string SpeHeroFaceHeader = "id,名字,脸,眼,眉,发,嘴,鼻,发后,男胡,杂";
-        private const string PortraitLayoutHeader = "id,通用缩放,通用偏移X,通用偏移Y,详情缩放,详情偏移X,详情偏移Y,卡片缩放,卡片偏移X,卡片偏移Y,战斗卡片缩放,战斗卡片偏移X,战斗卡片偏移Y,战斗立绘缩放,战斗立绘偏移X,战斗立绘偏移Y";
+        private const string LegacyPortraitLayoutHeader = "id,通用缩放,通用偏移X,通用偏移Y,详情缩放,详情偏移X,详情偏移Y,卡片缩放,卡片偏移X,卡片偏移Y,战斗卡片缩放,战斗卡片偏移X,战斗卡片偏移Y,战斗立绘缩放,战斗立绘偏移X,战斗立绘偏移Y";
+        private const string PortraitLayoutHeader = "id,名字,通用缩放,通用偏移X,通用偏移Y,详情缩放,详情偏移X,详情偏移Y,卡片缩放,卡片偏移X,卡片偏移Y,战斗卡片缩放,战斗卡片偏移X,战斗卡片偏移Y,战斗立绘缩放,战斗立绘偏移X,战斗立绘偏移Y";
         private const string DefaultModConfigText =
             "# 是否允许所有特殊人物可招募\r\n" +
             "# true=允许，false=保持游戏原版逻辑\r\n" +
-            "EnableRecruitAllSpeHeroes=true\r\n";
+            "EnableRecruitAllSpeHeroes=true\r\n" +
+            "\r\n" +
+            "# 是否输出详细调试日志\r\n" +
+            "# true=输出立绘缓存命中、重载和路径信息，false=只输出关键日志\r\n" +
+            "EnableVerboseLog=false\r\n";
 
         private static readonly string DefaultSpeHeroCsv =
             SpeHeroHeader + "\r\n" +
@@ -118,17 +114,16 @@ namespace LongYinCustomSpeHeroData
 
         private static readonly string DefaultPortraitLayoutCsv =
             PortraitLayoutHeader + "\r\n" +
-            "171,1.00,20,-120,1.00,0,0,1.00,0,0,1.00,0,0,1.00,0,0\r\n";
+            "171,姜.映潭,1.00,20,-120,1.00,0,0,1.00,0,0,1.00,0,0,1.00,0,0\r\n";
 
         private static LoadedConfigData _cachedSpeHeroConfig = LoadedConfigData.Empty;
         private static LoadedConfigData _cachedSpeHeroFaceConfig = LoadedConfigData.Empty;
         private static bool _cachedEnableRecruitAllSpeHeroes = true;
+        private static bool _cachedEnableVerboseLog;
         private static DateTime _cachedModConfigWriteTimeUtc = DateTime.MinValue;
         private static bool _exportedVanillaSpeHeroData;
         private static bool _exportedVanillaSpeHeroFaceData;
-        private static string _cachedPortraitBindingSignature = string.Empty;
-        private static Dictionary<int, PortraitBindingInfo> _cachedPortraitBindingsByHeroId = new();
-        private static Dictionary<string, PortraitBindingInfo> _cachedPortraitBindingsByNormalizedName = new(StringComparer.OrdinalIgnoreCase);
+        private static string _cachedPortraitPathSignature = string.Empty;
         private static Dictionary<int, string> _cachedPortraitPathsBySourceHeroId = new();
         private static LoadedPortraitLayoutData _cachedPortraitLayoutData = LoadedPortraitLayoutData.Empty;
         private static readonly Dictionary<int, PortraitSpriteCacheEntry> CachedPortraitSpritesByHeroId = new();
@@ -157,6 +152,10 @@ namespace LongYinCustomSpeHeroData
                 {
                     File.WriteAllText(ModConfigPath, DefaultModConfigText, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
                     LOG.Msg($"已生成默认配置：{ModConfigPath}");
+                }
+                else
+                {
+                    EnsureModConfigKeysExist();
                 }
 
                 bool hasLegacyConfig =
@@ -306,7 +305,8 @@ namespace LongYinCustomSpeHeroData
                     return;
                 }
 
-                if (string.Equals(lines[0].Trim('\uFEFF'), PortraitLayoutHeader, StringComparison.Ordinal))
+                string trimmedHeader = lines[0].Trim('\uFEFF');
+                if (string.Equals(trimmedHeader, PortraitLayoutHeader, StringComparison.Ordinal))
                 {
                     return;
                 }
@@ -386,6 +386,26 @@ namespace LongYinCustomSpeHeroData
 
         internal static bool IsRecruitAllSpeHeroesEnabled()
         {
+            LoadModConfigIfNeeded();
+            return _cachedEnableRecruitAllSpeHeroes;
+        }
+
+        internal static bool IsVerboseLogEnabled()
+        {
+            LoadModConfigIfNeeded();
+            return _cachedEnableVerboseLog;
+        }
+
+        private static void LogVerbose(string message)
+        {
+            if (IsVerboseLogEnabled())
+            {
+                LOG.Msg(message);
+            }
+        }
+
+        private static void LoadModConfigIfNeeded()
+        {
             EnsureConfigExists();
 
             try
@@ -393,11 +413,12 @@ namespace LongYinCustomSpeHeroData
                 DateTime lastWriteTimeUtc = File.GetLastWriteTimeUtc(ModConfigPath);
                 if (_cachedModConfigWriteTimeUtc == lastWriteTimeUtc)
                 {
-                    return _cachedEnableRecruitAllSpeHeroes;
+                    return;
                 }
 
                 _cachedModConfigWriteTimeUtc = lastWriteTimeUtc;
                 _cachedEnableRecruitAllSpeHeroes = true;
+                _cachedEnableVerboseLog = false;
 
                 foreach (string rawLine in File.ReadAllLines(ModConfigPath))
                 {
@@ -420,17 +441,92 @@ namespace LongYinCustomSpeHeroData
                         _cachedEnableRecruitAllSpeHeroes =
                             string.Equals(value, "true", StringComparison.OrdinalIgnoreCase) ||
                             string.Equals(value, "1", StringComparison.OrdinalIgnoreCase);
-                        break;
+                    }
+                    else if (string.Equals(key, VerboseLogConfigKey, StringComparison.OrdinalIgnoreCase))
+                    {
+                        _cachedEnableVerboseLog =
+                            string.Equals(value, "true", StringComparison.OrdinalIgnoreCase) ||
+                            string.Equals(value, "1", StringComparison.OrdinalIgnoreCase);
                     }
                 }
-
-                return _cachedEnableRecruitAllSpeHeroes;
             }
             catch (Exception ex)
             {
                 LOG.Warning($"读取配置文件 LongYinCustomSpeHeroData.cfg 失败：{ex.GetType().Name} - {ex.Message}");
-                return true;
+                _cachedEnableRecruitAllSpeHeroes = true;
+                _cachedEnableVerboseLog = false;
             }
+        }
+
+        private static void EnsureModConfigKeysExist()
+        {
+            try
+            {
+                string content = ReadAllTextShared(ModConfigPath);
+                bool hasRecruitAllSpeHeroes = HasConfigKey(content, RecruitAllSpeHeroesConfigKey);
+                bool hasVerboseLog = HasConfigKey(content, VerboseLogConfigKey);
+                if (hasRecruitAllSpeHeroes && hasVerboseLog)
+                {
+                    return;
+                }
+
+                var builder = new StringBuilder(content.TrimEnd('\r', '\n'));
+                if (builder.Length > 0)
+                {
+                    builder.Append("\r\n");
+                }
+
+                if (!hasRecruitAllSpeHeroes)
+                {
+                    builder.Append("\r\n");
+                    builder.Append("# 是否允许所有特殊人物可招募\r\n");
+                    builder.Append("# true=允许，false=保持游戏原版逻辑\r\n");
+                    builder.Append("EnableRecruitAllSpeHeroes=true\r\n");
+                }
+
+                if (!hasVerboseLog)
+                {
+                    builder.Append("\r\n");
+                    builder.Append("# 是否输出详细调试日志\r\n");
+                    builder.Append("# true=输出立绘缓存命中、重载和路径信息，false=只输出关键日志\r\n");
+                    builder.Append("EnableVerboseLog=false\r\n");
+                }
+
+                if (TryWriteAllTextUtf8(ModConfigPath, builder.ToString()))
+                {
+                    LOG.Msg($"已补全配置项：{ModConfigPath}");
+                }
+            }
+            catch (Exception ex)
+            {
+                LOG.Warning($"补全配置文件 LongYinCustomSpeHeroData.cfg 失败：{ex.GetType().Name} - {ex.Message}");
+            }
+        }
+
+        private static bool HasConfigKey(string content, string configKey)
+        {
+            foreach (string rawLine in content.Replace("\uFEFF", "").Split(new[] { "\r\n", "\n" }, StringSplitOptions.None))
+            {
+                string line = rawLine.Trim();
+                if (string.IsNullOrWhiteSpace(line) || line.StartsWith('#'))
+                {
+                    continue;
+                }
+
+                int separatorIndex = line.IndexOf('=');
+                if (separatorIndex <= 0)
+                {
+                    continue;
+                }
+
+                string key = line[..separatorIndex].Trim();
+                if (string.Equals(key, configKey, StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         internal static bool ShouldPatchSpeHero(string path)
@@ -569,7 +665,7 @@ namespace LongYinCustomSpeHeroData
                             continue;
                         }
 
-                        layoutsByHeroId[heroId] = BuildPortraitLayoutConfig(headers, cells);
+                        layoutsByHeroId[heroId] = BuildPortraitLayoutConfig(headers, cells, source.CreatePortraitOrigin(path));
                     }
                 }
 
@@ -595,11 +691,6 @@ namespace LongYinCustomSpeHeroData
             if (heroData == null)
             {
                 return false;
-            }
-
-            if (TryResolvePortraitBinding(heroData, out PortraitBindingInfo binding))
-            {
-                return TryGetPortraitLayoutConfig(binding.SourceHeroId, out config);
             }
 
             return TryGetPortraitLayoutConfig(heroData.heroID, out config);
@@ -691,9 +782,6 @@ namespace LongYinCustomSpeHeroData
 
                 string[] canonicalHeaders = SplitCsvLine(canonicalHeaderLine);
                 var rowsById = new Dictionary<int, string>();
-                var bindingsByHeroId = new Dictionary<int, PortraitBindingInfo>();
-                var bindingsByNormalizedName = new Dictionary<string, PortraitBindingInfo>(StringComparer.OrdinalIgnoreCase);
-
                 foreach (ConfigSource source in sources)
                 {
                     string path = source.GetCsvPath(fileName);
@@ -721,7 +809,6 @@ namespace LongYinCustomSpeHeroData
                     }
 
                     int idColumnIndex = FindColumnIndex(headers, "id");
-                    int nameColumnIndex = FindColumnIndex(headers, "名字");
                     var seenIdsInSource = new HashSet<int>();
 
                     for (int i = 1; i < lines.Length; i++)
@@ -747,14 +834,6 @@ namespace LongYinCustomSpeHeroData
                         }
 
                         rowsById[heroId] = NormalizeCsvRow(canonicalHeaders, headers, cells);
-                        string heroName = GetCell(cells, nameColumnIndex);
-                        string normalizedHeroName = NormalizeHeroName(heroName);
-                        var binding = new PortraitBindingInfo(heroId, heroName, normalizedHeroName, source.CreatePortraitOrigin(path));
-                        bindingsByHeroId[heroId] = binding;
-                        if (!string.IsNullOrWhiteSpace(normalizedHeroName))
-                        {
-                            bindingsByNormalizedName[normalizedHeroName] = binding;
-                        }
                     }
                 }
 
@@ -764,8 +843,6 @@ namespace LongYinCustomSpeHeroData
                         false,
                         string.Empty,
                         0,
-                        new Dictionary<int, PortraitBindingInfo>(),
-                        new Dictionary<string, PortraitBindingInfo>(StringComparer.OrdinalIgnoreCase),
                         cacheSignature);
                     return cachedConfig;
                 }
@@ -776,8 +853,6 @@ namespace LongYinCustomSpeHeroData
                     true,
                     string.Join("\r\n", outputLines) + "\r\n",
                     rowsById.Count,
-                    bindingsByHeroId,
-                    bindingsByNormalizedName,
                     cacheSignature);
                 return cachedConfig;
             }
@@ -788,14 +863,15 @@ namespace LongYinCustomSpeHeroData
             }
         }
 
-        private static PortraitLayoutConfig BuildPortraitLayoutConfig(string[] headers, string[] cells)
+        private static PortraitLayoutConfig BuildPortraitLayoutConfig(string[] headers, string[] cells, PortraitConfigOrigin origin)
         {
             return new PortraitLayoutConfig(
                 BuildPortraitSceneLayoutOverride(headers, cells, "详情"),
                 BuildPortraitSceneLayoutOverride(headers, cells, "卡片"),
                 BuildPortraitSceneLayoutOverride(headers, cells, "战斗卡片"),
                 BuildPortraitSceneLayoutOverride(headers, cells, "战斗立绘"),
-                BuildPortraitSceneLayoutOverride(headers, cells, "通用"));
+                BuildPortraitSceneLayoutOverride(headers, cells, "通用"),
+                origin);
         }
 
         private static PortraitSceneLayoutOverride BuildPortraitSceneLayoutOverride(string[] headers, string[] cells, string prefix)
@@ -1028,113 +1104,51 @@ namespace LongYinCustomSpeHeroData
                    !targetHero.recruitAble;
         }
 
-        internal static bool TryResolvePortraitBinding(HeroData heroData, out PortraitBindingInfo binding)
+        private static void EnsurePortraitPathsCurrent()
         {
-            return TryResolvePortraitBinding(heroData, out binding, out _);
-        }
-
-        internal static bool TryResolvePortraitBinding(HeroData heroData, out PortraitBindingInfo binding, out string matchMode)
-        {
-            EnsurePortraitBindingsCurrent();
-            binding = null;
-            matchMode = "none";
-            if (heroData == null)
+            LoadedPortraitLayoutData portraitLayoutConfig = LoadPortraitLayoutConfig();
+            string pathSignature = portraitLayoutConfig.CacheSignature;
+            if (string.Equals(pathSignature, _cachedPortraitPathSignature, StringComparison.Ordinal))
             {
-                return false;
-            }
-
-            if (_cachedPortraitBindingsByHeroId.TryGetValue(heroData.heroID, out binding))
-            {
-                matchMode = "id";
-                return true;
-            }
-
-            string normalizedHeroName = NormalizeHeroName(heroData.heroName);
-            if (heroData.speHero &&
-                !string.IsNullOrWhiteSpace(normalizedHeroName) &&
-                _cachedPortraitBindingsByNormalizedName.TryGetValue(normalizedHeroName, out binding))
-            {
-                matchMode = "name";
-                return true;
-            }
-
-            return false;
-        }
-
-        private static void EnsurePortraitBindingsCurrent()
-        {
-            LoadedConfigData speHeroConfig = LoadSpeHeroConfig();
-            LoadedConfigData speHeroFaceConfig = LoadSpeHeroFaceConfig();
-            string bindingSignature = $"{speHeroConfig.CacheSignature}||{speHeroFaceConfig.CacheSignature}";
-            if (string.Equals(bindingSignature, _cachedPortraitBindingSignature, StringComparison.Ordinal))
-            {
+                LogVerbose($"立绘路径缓存命中：signature={pathSignature}, 布局数={portraitLayoutConfig.LayoutsByHeroId.Count}, 图片路径数={_cachedPortraitPathsBySourceHeroId.Count}, Sprite缓存数={CachedPortraitSpritesByHeroId.Count}");
                 return;
             }
 
+            LogVerbose($"立绘路径缓存失效，准备重建：oldSignature={_cachedPortraitPathSignature}, newSignature={pathSignature}, 旧Sprite缓存数={CachedPortraitSpritesByHeroId.Count}");
             ResetPortraitSpriteCache();
             PortraitWarnings.Clear();
             PortraitAppliedLogHeroIds.Clear();
 
-            var bindings = new Dictionary<int, PortraitBindingInfo>();
-            var bindingsByNormalizedName = new Dictionary<string, PortraitBindingInfo>(StringComparer.OrdinalIgnoreCase);
             var portraitPaths = new Dictionary<int, string>();
-            foreach (var pair in speHeroConfig.BindingsByHeroId.OrderBy(pair => pair.Key))
+            foreach (var pair in portraitLayoutConfig.LayoutsByHeroId.OrderBy(pair => pair.Key))
             {
-                bindings[pair.Key] = pair.Value;
-            }
-
-            foreach (var pair in speHeroConfig.BindingsByNormalizedName)
-            {
-                bindingsByNormalizedName[pair.Key] = pair.Value;
-            }
-
-            foreach (var pair in speHeroFaceConfig.BindingsByHeroId.OrderBy(pair => pair.Key))
-            {
-                if (!bindings.ContainsKey(pair.Key))
-                {
-                    bindings[pair.Key] = pair.Value;
-                }
-            }
-
-            foreach (var pair in speHeroFaceConfig.BindingsByNormalizedName)
-            {
-                if (!bindingsByNormalizedName.ContainsKey(pair.Key))
-                {
-                    bindingsByNormalizedName[pair.Key] = pair.Value;
-                }
-            }
-
-            foreach (PortraitBindingInfo binding in bindings.Values
-                         .Concat(bindingsByNormalizedName.Values)
-                         .GroupBy(item => item.SourceHeroId)
-                         .Select(group => group.First())
-                         .OrderBy(item => item.SourceHeroId))
-            {
-                string foundPath = FindExistingPortraitPath(binding.SourceHeroId, binding.Origin);
+                string foundPath = FindExistingPortraitPath(pair.Key, pair.Value.Origin);
                 if (!string.IsNullOrWhiteSpace(foundPath))
                 {
-                    portraitPaths[binding.SourceHeroId] = foundPath;
+                    portraitPaths[pair.Key] = foundPath;
                 }
             }
 
-            _cachedPortraitBindingsByHeroId = bindings;
-            _cachedPortraitBindingsByNormalizedName = bindingsByNormalizedName;
             _cachedPortraitPathsBySourceHeroId = portraitPaths;
-            _cachedPortraitBindingSignature = bindingSignature;
+            _cachedPortraitPathSignature = pathSignature;
+            LogVerbose($"立绘路径缓存已重建：布局数={portraitLayoutConfig.LayoutsByHeroId.Count}, 图片路径数={portraitPaths.Count}");
         }
 
         internal static bool TryLoadCustomPortraitSprite(HeroData heroData, out Sprite sprite)
         {
             sprite = null;
-            if (heroData == null || heroData.heroID < 0 || !TryResolvePortraitBinding(heroData, out PortraitBindingInfo binding, out _))
+            EnsurePortraitPathsCurrent();
+            if (heroData == null || heroData.heroID < 0 || !TryGetPortraitLayoutConfig(heroData.heroID, out PortraitLayoutConfig layoutConfig))
             {
+                LogVerbose($"立绘缓存跳过：未匹配布局，runtimeID={heroData?.heroID ?? -1}, heroName={heroData?.heroName ?? string.Empty}");
                 return false;
             }
 
-            int sourceHeroId = binding.SourceHeroId;
-            PortraitConfigOrigin origin = binding.Origin;
+            int sourceHeroId = heroData.heroID;
+            PortraitConfigOrigin origin = layoutConfig.Origin;
             if (!_cachedPortraitPathsBySourceHeroId.TryGetValue(sourceHeroId, out string foundImagePath) || string.IsNullOrWhiteSpace(foundImagePath))
             {
+                LogVerbose($"立绘缓存跳过：未找到图片路径，runtimeID={heroData.heroID}, sourceID={sourceHeroId}, heroName={heroData.heroName}");
                 RemovePortraitSpriteCache(sourceHeroId);
                 return false;
             }
@@ -1151,10 +1165,12 @@ namespace LongYinCustomSpeHeroData
                 string.Equals(cachedEntry.ImagePath, foundImagePath, StringComparison.OrdinalIgnoreCase) &&
                 cachedEntry.WriteTimeUtc == writeTimeUtc)
             {
+                LogVerbose($"立绘 Sprite 缓存命中：runtimeID={heroData.heroID}, sourceID={sourceHeroId}, path={displayPath}, Sprite缓存数={CachedPortraitSpritesByHeroId.Count}");
                 sprite = cachedEntry.Sprite;
                 return true;
             }
 
+            LogVerbose($"立绘 Sprite 缓存未命中，准备读取图片：runtimeID={heroData.heroID}, sourceID={sourceHeroId}, path={displayPath}, writeTimeUtc={writeTimeUtc:O}");
             RemovePortraitSpriteCache(sourceHeroId);
 
             try
@@ -1174,6 +1190,7 @@ namespace LongYinCustomSpeHeroData
                 Sprite loadedSprite = Sprite.Create(texture, rect, new Vector2(0.5f, 0.5f), 100f);
                 loadedSprite.name = texture.name;
                 CachedPortraitSpritesByHeroId[sourceHeroId] = new PortraitSpriteCacheEntry(foundImagePath, writeTimeUtc, texture, loadedSprite);
+                LogVerbose($"立绘 Sprite 已载入缓存：runtimeID={heroData.heroID}, sourceID={sourceHeroId}, size={texture.width}x{texture.height}, Sprite缓存数={CachedPortraitSpritesByHeroId.Count}");
                 sprite = loadedSprite;
                 return true;
             }
@@ -1332,7 +1349,7 @@ namespace LongYinCustomSpeHeroData
 
             if (PortraitAppliedLogHeroIds.Add(heroData.heroID))
             {
-                LOG.Msg($"已应用 NPC 自定义立绘：heroID={heroData.heroID}, heroName={heroData.heroName}, {DescribeTransformContext(targetSkeletonParent)}");
+                LogVerbose($"已应用 NPC 自定义立绘：heroID={heroData.heroID}, heroName={heroData.heroName}, {DescribeTransformContext(targetSkeletonParent)}");
             }
         }
 

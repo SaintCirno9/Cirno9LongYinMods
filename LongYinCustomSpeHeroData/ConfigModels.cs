@@ -23,25 +23,6 @@ namespace LongYinCustomSpeHeroData
         public string RelativePortraitDir { get; }
     }
 
-    internal sealed class PortraitBindingInfo
-    {
-        public PortraitBindingInfo(int sourceHeroId, string heroName, string normalizedHeroName, PortraitConfigOrigin origin)
-        {
-            SourceHeroId = sourceHeroId;
-            HeroName = heroName ?? string.Empty;
-            NormalizedHeroName = normalizedHeroName ?? string.Empty;
-            Origin = origin;
-        }
-
-        public int SourceHeroId { get; }
-
-        public string HeroName { get; }
-
-        public string NormalizedHeroName { get; }
-
-        public PortraitConfigOrigin Origin { get; }
-    }
-
     internal sealed class ConfigSource
     {
         public ConfigSource(string sourceName, string directoryPath, string relativeDirectoryPath, int order)
@@ -125,13 +106,15 @@ namespace LongYinCustomSpeHeroData
             PortraitSceneLayoutOverride card,
             PortraitSceneLayoutOverride battleCard,
             PortraitSceneLayoutOverride battlePortrait,
-            PortraitSceneLayoutOverride fallback)
+            PortraitSceneLayoutOverride fallback,
+            PortraitConfigOrigin origin)
         {
             HeroDetail = heroDetail ?? new PortraitSceneLayoutOverride(null, null, null);
             Card = card ?? new PortraitSceneLayoutOverride(null, null, null);
             BattleCard = battleCard ?? new PortraitSceneLayoutOverride(null, null, null);
             BattlePortrait = battlePortrait ?? new PortraitSceneLayoutOverride(null, null, null);
             Fallback = fallback ?? new PortraitSceneLayoutOverride(null, null, null);
+            Origin = origin;
         }
 
         public PortraitSceneLayoutOverride HeroDetail { get; }
@@ -143,6 +126,8 @@ namespace LongYinCustomSpeHeroData
         public PortraitSceneLayoutOverride BattlePortrait { get; }
 
         public PortraitSceneLayoutOverride Fallback { get; }
+
+        public PortraitConfigOrigin Origin { get; }
     }
 
     internal sealed class LoadedPortraitLayoutData

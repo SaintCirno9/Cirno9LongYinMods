@@ -456,12 +456,20 @@ namespace LongYinCustomSpeHeroData
 
         private static bool IsHeroIconContext(Transform targetSkeletonParent)
         {
-            if (targetSkeletonParent == null)
+            if (!IsSmallBackPortraitContext(targetSkeletonParent))
             {
                 return false;
             }
 
-            return Main.BuildTransformPath(targetSkeletonParent).EndsWith("/HeroIcon(Clone)/Back", StringComparison.Ordinal);
+            Transform cardRoot = targetSkeletonParent.parent;
+            Transform content = cardRoot != null ? cardRoot.parent : null;
+            Transform viewport = content != null ? content.parent : null;
+
+            return cardRoot != null &&
+                   content != null &&
+                   viewport != null &&
+                   string.Equals(content.gameObject.name, "Content", StringComparison.Ordinal) &&
+                   string.Equals(viewport.gameObject.name, "Viewport", StringComparison.Ordinal);
         }
 
         private static bool IsBattleTeamHeroIconContext(Transform targetSkeletonParent)
@@ -473,7 +481,25 @@ namespace LongYinCustomSpeHeroData
 
             string path = Main.BuildTransformPath(targetSkeletonParent);
             return path.Contains("/BattleTeamHeroIcon(Clone)/", StringComparison.Ordinal) &&
-                   path.EndsWith("/HeroIcon(Clone)/Back", StringComparison.Ordinal);
+                   IsSmallBackPortraitContext(targetSkeletonParent);
+        }
+
+        private static bool IsSmallBackPortraitContext(Transform targetSkeletonParent)
+        {
+            if (targetSkeletonParent == null || !string.Equals(targetSkeletonParent.gameObject.name, "Back", StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            RectTransform rectTransform = targetSkeletonParent.TryCast<RectTransform>();
+            if (rectTransform == null)
+            {
+                return false;
+            }
+
+            float width = Mathf.Abs(rectTransform.rect.width);
+            float height = Mathf.Abs(rectTransform.rect.height);
+            return width > 0f && width <= 180f && height > 0f && height <= 220f;
         }
 
         private static bool IsBattleNowActiveHeroContext(Transform targetSkeletonParent)
