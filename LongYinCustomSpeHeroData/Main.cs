@@ -11,7 +11,7 @@ using Il2CppInterop.Runtime;
 using MelonLoader;
 using UnityEngine;
 
-[assembly: MelonInfo(typeof(LongYinCustomSpeHeroData.Main), "LongYinCustomSpeHeroData", "2.2.0", "SaintCirno9", null)]
+[assembly: MelonInfo(typeof(LongYinCustomSpeHeroData.Main), "LongYinCustomSpeHeroData", "2.2.1", "SaintCirno9", null)]
 [assembly: MelonGame("TppStudio", "LongYinLiZhiZhuan")]
 
 namespace LongYinCustomSpeHeroData
@@ -123,9 +123,13 @@ namespace LongYinCustomSpeHeroData
         private static DateTime _cachedModConfigWriteTimeUtc = DateTime.MinValue;
         private static bool _exportedVanillaSpeHeroData;
         private static bool _exportedVanillaSpeHeroFaceData;
+        private static int? _cachedVanillaMaxSpeHeroId;
+        private static DateTime _cachedVanillaSpeHeroWriteTimeUtc = DateTime.MinValue;
         private static string _cachedPortraitPathSignature = string.Empty;
         private static Dictionary<int, string> _cachedPortraitPathsBySourceHeroId = new();
         private static LoadedPortraitLayoutData _cachedPortraitLayoutData = LoadedPortraitLayoutData.Empty;
+        private static readonly Dictionary<int, int> SourceHeroIdToRuntimeHeroId = new();
+        private static readonly Dictionary<int, int> RuntimeHeroIdToSourceHeroId = new();
         private static readonly Dictionary<int, PortraitSpriteCacheEntry> CachedPortraitSpritesByHeroId = new();
         private static readonly HashSet<string> PortraitWarnings = new(StringComparer.OrdinalIgnoreCase);
         private static readonly HashSet<int> PortraitAppliedLogHeroIds = new();
@@ -541,9 +545,9 @@ namespace LongYinCustomSpeHeroData
                    string.Equals(path.Trim(), SpeHeroFaceResourcePath, StringComparison.OrdinalIgnoreCase);
         }
 
-        internal static void ExportVanillaCsvIfNeeded(string exportPath, string text, ref bool exportedFlag)
+        internal static void ExportVanillaCsvIfNeeded(string exportPath, TextAsset textAsset, ref bool exportedFlag)
         {
-            if (exportedFlag || string.IsNullOrWhiteSpace(text))
+            if (exportedFlag || textAsset == null)
             {
                 return;
             }
@@ -551,7 +555,20 @@ namespace LongYinCustomSpeHeroData
             try
             {
                 Directory.CreateDirectory(ConfigDir);
-                File.WriteAllText(exportPath, text, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
+                byte[] bytes = textAsset.bytes;
+                if (bytes != null && bytes.Length > 0)
+                {
+                    File.WriteAllBytes(exportPath, bytes);
+                }
+                else if (!string.IsNullOrWhiteSpace(textAsset.text))
+                {
+                    File.WriteAllText(exportPath, textAsset.text, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
+                }
+                else
+                {
+                    return;
+                }
+
                 exportedFlag = true;
                 LOG.Msg($"已导出原版表：{exportPath}");
             }
@@ -609,13 +626,15 @@ namespace LongYinCustomSpeHeroData
             try
             {
                 List<ConfigSource> sources = CollectConfigSources();
-                string cacheSignature = BuildConfigCacheSignature(sources, PortraitLayoutFileName);
+                string cacheSignature = $"{BuildConfigCacheSignature(sources, PortraitLayoutFileName)}|{BuildConfigCacheSignature(sources, SpeHeroFileName)}";
                 if (string.Equals(_cachedPortraitLayoutData.CacheSignature, cacheSignature, StringComparison.Ordinal))
                 {
                     return _cachedPortraitLayoutData;
                 }
 
+                Dictionary<int, string> speHeroNamesById = BuildSpeHeroNamesById();
                 var layoutsByHeroId = new Dictionary<int, PortraitLayoutConfig>();
+                var layoutHeroIdsByName = new Dictionary<string, int>(StringComparer.Ordinal);
                 foreach (ConfigSource source in sources)
                 {
                     string path = source.GetCsvPath(PortraitLayoutFileName);
@@ -665,11 +684,21 @@ namespace LongYinCustomSpeHeroData
                             continue;
                         }
 
-                        layoutsByHeroId[heroId] = BuildPortraitLayoutConfig(headers, cells, source.CreatePortraitOrigin(path));
+                        string heroName = GetCell(cells, FindColumnIndex(headers, "名字"));
+                        if (string.IsNullOrWhiteSpace(heroName) && speHeroNamesById.TryGetValue(heroId, out string speHeroName))
+                        {
+                            heroName = speHeroName;
+                        }
+
+                        layoutsByHeroId[heroId] = BuildPortraitLayoutConfig(headers, cells, source.CreatePortraitOrigin(path), heroName);
+                        if (!string.IsNullOrWhiteSpace(heroName))
+                        {
+                            layoutHeroIdsByName[NormalizeHeroName(heroName)] = heroId;
+                        }
                     }
                 }
 
-                _cachedPortraitLayoutData = new LoadedPortraitLayoutData(layoutsByHeroId, cacheSignature);
+                _cachedPortraitLayoutData = new LoadedPortraitLayoutData(layoutsByHeroId, layoutHeroIdsByName, cacheSignature);
                 return _cachedPortraitLayoutData;
             }
             catch (Exception ex)
@@ -677,6 +706,51 @@ namespace LongYinCustomSpeHeroData
                 LOG.Error($"读取立绘布局配置失败：{PortraitLayoutFileName}，{ex}");
                 return LoadedPortraitLayoutData.Empty;
             }
+        }
+
+        private static Dictionary<int, string> BuildSpeHeroNamesById()
+        {
+            var namesById = new Dictionary<int, string>();
+            LoadedConfigData speHeroConfig = LoadSpeHeroConfig();
+            if (!speHeroConfig.Valid || string.IsNullOrWhiteSpace(speHeroConfig.CsvText))
+            {
+                return namesById;
+            }
+
+            string[] lines = speHeroConfig.CsvText.Replace("\uFEFF", "").Split(new[] { "\r\n", "\n" }, StringSplitOptions.None);
+            if (lines.Length <= 1)
+            {
+                return namesById;
+            }
+
+            string[] headers = SplitCsvLine(lines[0]);
+            int idColumnIndex = FindColumnIndex(headers, "id");
+            int nameColumnIndex = FindColumnIndex(headers, "名字");
+            if (idColumnIndex < 0 || nameColumnIndex < 0)
+            {
+                return namesById;
+            }
+
+            foreach (string rawLine in lines.Skip(1))
+            {
+                string line = rawLine.Trim();
+                if (string.IsNullOrWhiteSpace(line) || line.StartsWith('#'))
+                {
+                    continue;
+                }
+
+                string[] cells = SplitCsvLine(line);
+                if (int.TryParse(GetCell(cells, idColumnIndex), NumberStyles.Integer, CultureInfo.InvariantCulture, out int heroId))
+                {
+                    string heroName = GetCell(cells, nameColumnIndex);
+                    if (!string.IsNullOrWhiteSpace(heroName))
+                    {
+                        namesById[heroId] = heroName;
+                    }
+                }
+            }
+
+            return namesById;
         }
 
         internal static bool TryGetPortraitLayoutConfig(int heroId, out PortraitLayoutConfig config)
@@ -687,13 +761,113 @@ namespace LongYinCustomSpeHeroData
 
         internal static bool TryGetPortraitLayoutConfig(HeroData heroData, out PortraitLayoutConfig config)
         {
+            return TryResolvePortraitLayout(heroData, out _, out config);
+        }
+
+        internal static bool TryResolvePortraitLayout(HeroData heroData, out int sourceHeroId, out PortraitLayoutConfig config)
+        {
+            sourceHeroId = -1;
             config = null;
             if (heroData == null)
             {
                 return false;
             }
 
-            return TryGetPortraitLayoutConfig(heroData.heroID, out config);
+            LoadedPortraitLayoutData data = LoadPortraitLayoutConfig();
+            if (RuntimeHeroIdToSourceHeroId.TryGetValue(heroData.heroID, out sourceHeroId) &&
+                data.LayoutsByHeroId.TryGetValue(sourceHeroId, out config))
+            {
+                return true;
+            }
+
+            if (data.LayoutsByHeroId.TryGetValue(heroData.heroID, out config))
+            {
+                if (string.IsNullOrWhiteSpace(config.HeroName) ||
+                    string.Equals(NormalizeHeroName(config.HeroName), NormalizeHeroName(heroData.heroName), StringComparison.Ordinal))
+                {
+                    sourceHeroId = heroData.heroID;
+                    return true;
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(heroData.heroName) &&
+                IsRuntimeAddedSpeHeroId(heroData.heroID) &&
+                data.LayoutHeroIdsByName.TryGetValue(NormalizeHeroName(heroData.heroName), out sourceHeroId) &&
+                data.LayoutsByHeroId.TryGetValue(sourceHeroId, out config))
+            {
+                return true;
+            }
+
+            sourceHeroId = -1;
+            return false;
+        }
+
+        private static bool IsRuntimeAddedSpeHeroId(int heroId)
+        {
+            int vanillaMaxSpeHeroId = GetVanillaMaxSpeHeroId();
+            return vanillaMaxSpeHeroId >= 0 && heroId > vanillaMaxSpeHeroId;
+        }
+
+        private static int GetVanillaMaxSpeHeroId()
+        {
+            DateTime writeTimeUtc = File.Exists(VanillaSpeHeroExportPath)
+                ? File.GetLastWriteTimeUtc(VanillaSpeHeroExportPath)
+                : DateTime.MinValue;
+            if (_cachedVanillaMaxSpeHeroId.HasValue && _cachedVanillaSpeHeroWriteTimeUtc == writeTimeUtc)
+            {
+                return _cachedVanillaMaxSpeHeroId.Value;
+            }
+
+            _cachedVanillaSpeHeroWriteTimeUtc = writeTimeUtc;
+            _cachedVanillaMaxSpeHeroId = ReadMaxSpeHeroId(VanillaSpeHeroExportPath);
+            return _cachedVanillaMaxSpeHeroId.Value;
+        }
+
+        private static int ReadMaxSpeHeroId(string path)
+        {
+            if (!File.Exists(path))
+            {
+                return -1;
+            }
+
+            try
+            {
+                string[] lines = ReadAllLinesShared(path);
+                if (lines.Length <= 1)
+                {
+                    return -1;
+                }
+
+                string[] headers = SplitCsvLine(lines[0]);
+                int idColumnIndex = FindColumnIndex(headers, "id");
+                if (idColumnIndex < 0)
+                {
+                    return -1;
+                }
+
+                int maxId = -1;
+                foreach (string rawLine in lines.Skip(1))
+                {
+                    string line = rawLine.Trim();
+                    if (string.IsNullOrWhiteSpace(line) || line.StartsWith('#'))
+                    {
+                        continue;
+                    }
+
+                    string[] cells = SplitCsvLine(line);
+                    if (int.TryParse(GetCell(cells, idColumnIndex), NumberStyles.Integer, CultureInfo.InvariantCulture, out int heroId))
+                    {
+                        maxId = Math.Max(maxId, heroId);
+                    }
+                }
+
+                return maxId;
+            }
+            catch (Exception ex)
+            {
+                LOG.Warning($"读取原版特殊人物最大 id 失败：{path}，{ex.GetType().Name} - {ex.Message}");
+                return -1;
+            }
         }
 
         internal static List<ConfigSource> CollectConfigSources()
@@ -863,9 +1037,10 @@ namespace LongYinCustomSpeHeroData
             }
         }
 
-        private static PortraitLayoutConfig BuildPortraitLayoutConfig(string[] headers, string[] cells, PortraitConfigOrigin origin)
+        private static PortraitLayoutConfig BuildPortraitLayoutConfig(string[] headers, string[] cells, PortraitConfigOrigin origin, string heroName)
         {
             return new PortraitLayoutConfig(
+                heroName,
                 BuildPortraitSceneLayoutOverride(headers, cells, "详情"),
                 BuildPortraitSceneLayoutOverride(headers, cells, "卡片"),
                 BuildPortraitSceneLayoutOverride(headers, cells, "战斗卡片"),
@@ -896,6 +1071,16 @@ namespace LongYinCustomSpeHeroData
 
         internal static MergeResult BuildMergedCsvText(string vanillaText, LoadedConfigData configData, string tableName)
         {
+            if (string.Equals(tableName, "SpeHeroData", StringComparison.Ordinal))
+            {
+                return BuildMergedSpeHeroCsvText(vanillaText, configData, tableName);
+            }
+
+            if (string.Equals(tableName, "SpeHeroFaceData", StringComparison.Ordinal))
+            {
+                return BuildMergedSpeHeroFaceCsvText(vanillaText, configData, tableName);
+            }
+
             if (string.IsNullOrWhiteSpace(vanillaText) || !configData.Valid || configData.RowCount == 0 || string.IsNullOrWhiteSpace(configData.CsvText))
             {
                 return MergeResult.NoChange;
@@ -982,6 +1167,326 @@ namespace LongYinCustomSpeHeroData
             return changed
                 ? new MergeResult(true, mergedText, replacedCount, appendedCount)
                 : MergeResult.NoChange;
+        }
+
+        private static MergeResult BuildMergedSpeHeroCsvText(string vanillaText, LoadedConfigData configData, string tableName)
+        {
+            if (string.IsNullOrWhiteSpace(vanillaText) || !configData.Valid || configData.RowCount == 0 || string.IsNullOrWhiteSpace(configData.CsvText))
+            {
+                ResetRuntimeHeroIdMap();
+                return MergeResult.NoChange;
+            }
+
+            string[] vanillaLines = vanillaText.Replace("\uFEFF", "").Split(new[] { "\r\n", "\n" }, StringSplitOptions.None);
+            string[] customLines = configData.CsvText.Replace("\uFEFF", "").Split(new[] { "\r\n", "\n" }, StringSplitOptions.None);
+            if (vanillaLines.Length == 0 || customLines.Length <= 1)
+            {
+                ResetRuntimeHeroIdMap();
+                return MergeResult.NoChange;
+            }
+
+            string[] vanillaHeaders = SplitCsvLine(vanillaLines[0]);
+            string[] customHeaders = SplitCsvLine(customLines[0]);
+            int vanillaIdCol = FindColumnIndex(vanillaHeaders, "id");
+            int customIdCol = FindColumnIndex(customHeaders, "id");
+            if (vanillaIdCol < 0 || customIdCol < 0)
+            {
+                ResetRuntimeHeroIdMap();
+                return MergeResult.NoChange;
+            }
+
+            int vanillaMaxId = -1;
+            foreach (string rawLine in vanillaLines.Skip(1))
+            {
+                string line = rawLine.Trim();
+                if (string.IsNullOrWhiteSpace(line))
+                {
+                    continue;
+                }
+
+                string[] cells = SplitCsvLine(line);
+                if (int.TryParse(GetCell(cells, vanillaIdCol), NumberStyles.Integer, CultureInfo.InvariantCulture, out int parsedVanillaId))
+                {
+                    vanillaMaxId = Math.Max(vanillaMaxId, parsedVanillaId);
+                }
+            }
+
+            var overrideById = new Dictionary<string, string>(StringComparer.Ordinal);
+            var appendedRows = new List<(int SourceHeroId, string Line)>();
+            foreach (string rawLine in customLines.Skip(1))
+            {
+                string line = rawLine.Trim();
+                if (string.IsNullOrWhiteSpace(line) || line.StartsWith('#'))
+                {
+                    continue;
+                }
+
+                string[] cells = SplitCsvLine(line);
+                string id = GetCell(cells, customIdCol);
+                if (!int.TryParse(id, NumberStyles.Integer, CultureInfo.InvariantCulture, out int sourceHeroId))
+                {
+                    LOG.Warning($"{tableName} 检测到非法 id 行，已跳过：{line}");
+                    continue;
+                }
+
+                if (sourceHeroId <= vanillaMaxId)
+                {
+                    overrideById[id] = line;
+                }
+                else
+                {
+                    appendedRows.Add((sourceHeroId, line));
+                }
+            }
+
+            if (overrideById.Count == 0 && appendedRows.Count == 0)
+            {
+                ResetRuntimeHeroIdMap();
+                return MergeResult.NoChange;
+            }
+
+            var outputLines = new List<string> { vanillaLines[0] };
+            var matchedIds = new HashSet<string>(StringComparer.Ordinal);
+            int replacedCount = 0;
+            int appendedCount = 0;
+
+            for (int i = 1; i < vanillaLines.Length; i++)
+            {
+                string line = vanillaLines[i];
+                if (string.IsNullOrWhiteSpace(line))
+                {
+                    continue;
+                }
+
+                string[] cells = SplitCsvLine(line);
+                string id = GetCell(cells, vanillaIdCol);
+                if (!string.IsNullOrWhiteSpace(id) && overrideById.TryGetValue(id, out string replacementLine))
+                {
+                    outputLines.Add(replacementLine);
+                    matchedIds.Add(id);
+                    replacedCount++;
+                    continue;
+                }
+
+                outputLines.Add(line);
+            }
+
+            ResetRuntimeHeroIdMap();
+            int nextRuntimeHeroId = vanillaMaxId + 1;
+            foreach ((int sourceHeroId, string line) in appendedRows
+                         .OrderBy(row => row.SourceHeroId))
+            {
+                string[] cells = SplitCsvLine(line);
+                if (vanillaIdCol >= cells.Length)
+                {
+                    continue;
+                }
+
+                int runtimeHeroId = nextRuntimeHeroId++;
+                cells[vanillaIdCol] = runtimeHeroId.ToString(CultureInfo.InvariantCulture);
+                outputLines.Add(BuildCsvLine(cells));
+                RegisterRuntimeHeroId(sourceHeroId, runtimeHeroId);
+                appendedCount++;
+            }
+
+            string mergedText = string.Join("\r\n", outputLines);
+            bool changed = !string.Equals(mergedText, vanillaText.Replace("\uFEFF", ""), StringComparison.Ordinal);
+            return changed
+                ? new MergeResult(true, mergedText, replacedCount, appendedCount)
+                : MergeResult.NoChange;
+        }
+
+        private static MergeResult BuildMergedSpeHeroFaceCsvText(string vanillaText, LoadedConfigData configData, string tableName)
+        {
+            if (string.IsNullOrWhiteSpace(vanillaText) || !configData.Valid || configData.RowCount == 0 || string.IsNullOrWhiteSpace(configData.CsvText))
+            {
+                return MergeResult.NoChange;
+            }
+
+            string[] vanillaLines = vanillaText.Replace("\uFEFF", "").Split(new[] { "\r\n", "\n" }, StringSplitOptions.None);
+            string[] customLines = configData.CsvText.Replace("\uFEFF", "").Split(new[] { "\r\n", "\n" }, StringSplitOptions.None);
+            if (vanillaLines.Length == 0 || customLines.Length <= 1)
+            {
+                return MergeResult.NoChange;
+            }
+
+            string[] vanillaHeaders = SplitCsvLine(vanillaLines[0]);
+            string[] customHeaders = SplitCsvLine(customLines[0]);
+            int vanillaIdCol = FindColumnIndex(vanillaHeaders, "id");
+            int customIdCol = FindColumnIndex(customHeaders, "id");
+            if (vanillaIdCol < 0 || customIdCol < 0)
+            {
+                return MergeResult.NoChange;
+            }
+
+            EnsureRuntimeHeroIdMap(GetMaxCsvId(vanillaLines, vanillaIdCol));
+
+            var customById = new Dictionary<string, string>(StringComparer.Ordinal);
+            foreach (string rawLine in customLines.Skip(1))
+            {
+                string line = rawLine.Trim();
+                if (string.IsNullOrWhiteSpace(line) || line.StartsWith('#'))
+                {
+                    continue;
+                }
+
+                string[] cells = SplitCsvLine(line);
+                string id = GetCell(cells, customIdCol);
+                if (!int.TryParse(id, NumberStyles.Integer, CultureInfo.InvariantCulture, out int sourceHeroId))
+                {
+                    LOG.Warning($"{tableName} 检测到非法 id 行，已跳过：{line}");
+                    continue;
+                }
+
+                if (SourceHeroIdToRuntimeHeroId.TryGetValue(sourceHeroId, out int runtimeHeroId))
+                {
+                    cells[customIdCol] = runtimeHeroId.ToString(CultureInfo.InvariantCulture);
+                    id = cells[customIdCol];
+                    line = BuildCsvLine(cells);
+                }
+
+                customById[id] = line;
+            }
+
+            if (customById.Count == 0)
+            {
+                return MergeResult.NoChange;
+            }
+
+            var outputLines = new List<string> { vanillaLines[0] };
+            var matchedIds = new HashSet<string>(StringComparer.Ordinal);
+            int replacedCount = 0;
+            int appendedCount = 0;
+
+            for (int i = 1; i < vanillaLines.Length; i++)
+            {
+                string line = vanillaLines[i];
+                if (string.IsNullOrWhiteSpace(line))
+                {
+                    continue;
+                }
+
+                string[] cells = SplitCsvLine(line);
+                string id = GetCell(cells, vanillaIdCol);
+                if (!string.IsNullOrWhiteSpace(id) && customById.TryGetValue(id, out string replacementLine))
+                {
+                    outputLines.Add(replacementLine);
+                    matchedIds.Add(id);
+                    replacedCount++;
+                    continue;
+                }
+
+                outputLines.Add(line);
+            }
+
+            foreach (string id in customById.Keys
+                .Where(id => !matchedIds.Contains(id))
+                .OrderBy(id => int.TryParse(id, NumberStyles.Integer, CultureInfo.InvariantCulture, out int parsedId) ? parsedId : int.MaxValue)
+                .ThenBy(id => id, StringComparer.Ordinal))
+            {
+                outputLines.Add(customById[id]);
+                appendedCount++;
+            }
+
+            string mergedText = string.Join("\r\n", outputLines);
+            bool changed = !string.Equals(mergedText, vanillaText.Replace("\uFEFF", ""), StringComparison.Ordinal);
+            return changed
+                ? new MergeResult(true, mergedText, replacedCount, appendedCount)
+                : MergeResult.NoChange;
+        }
+
+        private static void ResetRuntimeHeroIdMap()
+        {
+            SourceHeroIdToRuntimeHeroId.Clear();
+            RuntimeHeroIdToSourceHeroId.Clear();
+        }
+
+        private static void RegisterRuntimeHeroId(int sourceHeroId, int runtimeHeroId)
+        {
+            SourceHeroIdToRuntimeHeroId[sourceHeroId] = runtimeHeroId;
+            RuntimeHeroIdToSourceHeroId[runtimeHeroId] = sourceHeroId;
+        }
+
+        private static void EnsureRuntimeHeroIdMap(int fallbackVanillaMaxSpeHeroId)
+        {
+            if (SourceHeroIdToRuntimeHeroId.Count > 0 || RuntimeHeroIdToSourceHeroId.Count > 0)
+            {
+                return;
+            }
+
+            int vanillaMaxSpeHeroId = GetVanillaMaxSpeHeroId();
+            if (vanillaMaxSpeHeroId < 0)
+            {
+                vanillaMaxSpeHeroId = fallbackVanillaMaxSpeHeroId;
+            }
+
+            if (vanillaMaxSpeHeroId < 0)
+            {
+                return;
+            }
+
+            LoadedConfigData speHeroConfig = LoadSpeHeroConfig();
+            if (!speHeroConfig.Valid || string.IsNullOrWhiteSpace(speHeroConfig.CsvText))
+            {
+                return;
+            }
+
+            string[] lines = speHeroConfig.CsvText.Replace("\uFEFF", "").Split(new[] { "\r\n", "\n" }, StringSplitOptions.None);
+            if (lines.Length <= 1)
+            {
+                return;
+            }
+
+            string[] headers = SplitCsvLine(lines[0]);
+            int idColumnIndex = FindColumnIndex(headers, "id");
+            if (idColumnIndex < 0)
+            {
+                return;
+            }
+
+            int nextRuntimeHeroId = vanillaMaxSpeHeroId + 1;
+            foreach (string rawLine in lines.Skip(1))
+            {
+                string line = rawLine.Trim();
+                if (string.IsNullOrWhiteSpace(line) || line.StartsWith('#'))
+                {
+                    continue;
+                }
+
+                string[] cells = SplitCsvLine(line);
+                if (int.TryParse(GetCell(cells, idColumnIndex), NumberStyles.Integer, CultureInfo.InvariantCulture, out int sourceHeroId) &&
+                    sourceHeroId > vanillaMaxSpeHeroId)
+                {
+                    RegisterRuntimeHeroId(sourceHeroId, nextRuntimeHeroId);
+                    nextRuntimeHeroId++;
+                }
+            }
+        }
+
+        private static int GetMaxCsvId(string[] lines, int idColumnIndex)
+        {
+            if (lines == null || idColumnIndex < 0)
+            {
+                return -1;
+            }
+
+            int maxId = -1;
+            foreach (string rawLine in lines.Skip(1))
+            {
+                string line = rawLine.Trim();
+                if (string.IsNullOrWhiteSpace(line) || line.StartsWith('#'))
+                {
+                    continue;
+                }
+
+                string[] cells = SplitCsvLine(line);
+                if (int.TryParse(GetCell(cells, idColumnIndex), NumberStyles.Integer, CultureInfo.InvariantCulture, out int parsedId))
+                {
+                    maxId = Math.Max(maxId, parsedId);
+                }
+            }
+
+            return maxId;
         }
 
         private static string NormalizeCsvRow(string[] canonicalHeaders, string[] sourceHeaders, string[] sourceCells)
@@ -1138,13 +1643,12 @@ namespace LongYinCustomSpeHeroData
         {
             sprite = null;
             EnsurePortraitPathsCurrent();
-            if (heroData == null || heroData.heroID < 0 || !TryGetPortraitLayoutConfig(heroData.heroID, out PortraitLayoutConfig layoutConfig))
+            if (heroData == null || heroData.heroID < 0 || !TryResolvePortraitLayout(heroData, out int sourceHeroId, out PortraitLayoutConfig layoutConfig))
             {
                 LogVerbose($"立绘缓存跳过：未匹配布局，runtimeID={heroData?.heroID ?? -1}, heroName={heroData?.heroName ?? string.Empty}");
                 return false;
             }
 
-            int sourceHeroId = heroData.heroID;
             PortraitConfigOrigin origin = layoutConfig.Origin;
             if (!_cachedPortraitPathsBySourceHeroId.TryGetValue(sourceHeroId, out string foundImagePath) || string.IsNullOrWhiteSpace(foundImagePath))
             {
@@ -1454,7 +1958,7 @@ namespace LongYinCustomSpeHeroData
 
                 if (isSpeHero)
                 {
-                    Main.ExportVanillaCsvIfNeeded(Main.VanillaSpeHeroExportPath, textAsset.text, ref Main.GetSpeHeroExportedFlagRef());
+                    Main.ExportVanillaCsvIfNeeded(Main.VanillaSpeHeroExportPath, textAsset, ref Main.GetSpeHeroExportedFlagRef());
                     LoadedConfigData configData = Main.LoadSpeHeroConfig();
                     MergeResult mergeResult = Main.BuildMergedCsvText(textAsset.text, configData, "SpeHeroData");
                     if (!mergeResult.Changed)
@@ -1472,7 +1976,7 @@ namespace LongYinCustomSpeHeroData
                     return;
                 }
 
-                Main.ExportVanillaCsvIfNeeded(Main.VanillaSpeHeroFaceExportPath, textAsset.text, ref Main.GetSpeHeroFaceExportedFlagRef());
+                Main.ExportVanillaCsvIfNeeded(Main.VanillaSpeHeroFaceExportPath, textAsset, ref Main.GetSpeHeroFaceExportedFlagRef());
                 LoadedConfigData faceConfigData = Main.LoadSpeHeroFaceConfig();
                 MergeResult faceMergeResult = Main.BuildMergedCsvText(textAsset.text, faceConfigData, "SpeHeroFaceData");
                 if (!faceMergeResult.Changed)

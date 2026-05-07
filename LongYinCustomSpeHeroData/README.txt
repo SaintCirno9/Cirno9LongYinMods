@@ -32,6 +32,9 @@
    - 设置为 `false` 时，保持游戏原版招募逻辑
    - `EnableVerboseLog=false` 用于控制是否输出立绘缓存命中、重载和路径等调试日志
 6. `SpeHeroData.csv` 对应 `GameData/SpeHeroData`。
+   - `id` 小于等于原版最大特殊人物 `id` 时，视为覆盖原版人物
+   - `id` 大于原版最大特殊人物 `id` 时，视为新增人物；Mod 会自动分配连续运行时 `id`
+   - 新增人物的 `SpeHeroFaceData.csv`、`PortraitLayout.csv` 和图片文件名仍然填写原配置 `id`
 7. `SpeHeroFaceData.csv` 对应 `GameData/SpeHeroFaceData`。
 8. 多个 `Data\数字目录` 会按数字从小到大加载，例如 `000 -> 010 -> 100`。
 9. 如果多个配置文件里出现相同 `id`：
@@ -45,7 +48,9 @@
    - 只有 `PortraitLayout.csv` 中实际出现过的特殊人物 `id`，Mod 才会尝试读取对应图片
 11. `PortraitLayout.csv` 用于给每个 NPC 单独配置图片缩放和偏移，表头如下：
    - `id,名字,通用缩放,通用偏移X,通用偏移Y,详情缩放,详情偏移X,详情偏移Y,卡片缩放,卡片偏移X,卡片偏移Y,战斗卡片缩放,战斗卡片偏移X,战斗卡片偏移Y,战斗立绘缩放,战斗立绘偏移X,战斗立绘偏移Y`
-   - `名字` 只用于编辑时备注，Mod 运行时仍只按 `id` 匹配
+   - `id` 填写原配置 `id`，用于匹配 `SpeHeroData.csv`、`SpeHeroFaceData.csv`、图片文件名和布局来源
+   - `名字` 同时用于旧存档兼容：运行时 `id` 命中但名字不一致时，会继续按名字查找原配置 `id`
+   - 按名字查找原配置 `id` 只会在运行时 `id` 大于原版特殊人物最大 `id` 时启用
    - 旧版缺少 `名字` 列的表头会在启动时自动补齐，新增列留空
    - `通用*` 是立绘基础配置
    - `详情*` 是人物详情大立绘在通用配置上的额外倍率和偏移

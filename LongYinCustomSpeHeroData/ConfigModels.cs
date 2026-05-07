@@ -102,6 +102,7 @@ namespace LongYinCustomSpeHeroData
     internal sealed class PortraitLayoutConfig
     {
         public PortraitLayoutConfig(
+            string heroName,
             PortraitSceneLayoutOverride heroDetail,
             PortraitSceneLayoutOverride card,
             PortraitSceneLayoutOverride battleCard,
@@ -115,7 +116,10 @@ namespace LongYinCustomSpeHeroData
             BattlePortrait = battlePortrait ?? new PortraitSceneLayoutOverride(null, null, null);
             Fallback = fallback ?? new PortraitSceneLayoutOverride(null, null, null);
             Origin = origin;
+            HeroName = heroName ?? string.Empty;
         }
+
+        public string HeroName { get; }
 
         public PortraitSceneLayoutOverride HeroDetail { get; }
 
@@ -134,17 +138,22 @@ namespace LongYinCustomSpeHeroData
     {
         public static readonly LoadedPortraitLayoutData Empty = new(
             new System.Collections.Generic.Dictionary<int, PortraitLayoutConfig>(),
+            new System.Collections.Generic.Dictionary<string, int>(System.StringComparer.Ordinal),
             string.Empty);
 
         public LoadedPortraitLayoutData(
             System.Collections.Generic.Dictionary<int, PortraitLayoutConfig> layoutsByHeroId,
+            System.Collections.Generic.Dictionary<string, int> layoutHeroIdsByName,
             string cacheSignature)
         {
             LayoutsByHeroId = layoutsByHeroId ?? new System.Collections.Generic.Dictionary<int, PortraitLayoutConfig>();
+            LayoutHeroIdsByName = layoutHeroIdsByName ?? new System.Collections.Generic.Dictionary<string, int>(System.StringComparer.Ordinal);
             CacheSignature = cacheSignature ?? string.Empty;
         }
 
         public System.Collections.Generic.Dictionary<int, PortraitLayoutConfig> LayoutsByHeroId { get; }
+
+        public System.Collections.Generic.Dictionary<string, int> LayoutHeroIdsByName { get; }
 
         public string CacheSignature { get; }
     }
