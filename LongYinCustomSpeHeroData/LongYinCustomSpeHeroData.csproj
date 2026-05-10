@@ -84,6 +84,7 @@
     <ItemGroup>
       <PackageFiles Include="$(TargetPath)" />
       <PackageFiles Include="$(MSBuildProjectDirectory)\README.txt" />
+      <PackageFiles Include="$(MSBuildProjectDirectory)\CHANGELOG.md" />
     </ItemGroup>
     <RemoveDir Directories="$(PackageTempDir)" />
     <MakeDir Directories="$(PackageTempDir)" />

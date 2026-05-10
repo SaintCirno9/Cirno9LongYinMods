@@ -18,7 +18,7 @@
 3. 如果第一次启动时没有检测到任何配置，且 `Data\000` 不存在，Mod 会自动生成：
    - `Data\000\SpeHeroData.csv`
    - `Data\000\SpeHeroFaceData.csv`
-   - `Data\000\PortraitLayout.csv`
+   - `Data\000\PortraitLayout.csv`（只有表头，不会默认启用立绘替换）
    - `Data\000\Portraits`
 4. 为兼容旧版本，Mod 仍会读取根目录下已有的：
    - `SpeHeroData.csv`

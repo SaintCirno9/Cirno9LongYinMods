@@ -11,7 +11,7 @@ using Il2CppInterop.Runtime;
 using MelonLoader;
 using UnityEngine;
 
-[assembly: MelonInfo(typeof(LongYinCustomSpeHeroData.Main), "LongYinCustomSpeHeroData", "2.3.0", "SaintCirno9", null)]
+[assembly: MelonInfo(typeof(LongYinCustomSpeHeroData.Main), "LongYinCustomSpeHeroData", "2.4.0", "SaintCirno9", null)]
 [assembly: MelonGame("TppStudio", "LongYinLiZhiZhuan")]
 
 namespace LongYinCustomSpeHeroData
@@ -106,15 +106,14 @@ namespace LongYinCustomSpeHeroData
 
         private static readonly string DefaultSpeHeroCsv =
             SpeHeroHeader + "\r\n" +
-            "171,姜.映潭,男,仙霞派,默认,副掌门,-1,稳重,聪颖,38,平常/善良,内功/剑法,医术/学识,无影乱剑,领袖;御剑;内家;正直;仁慈,,0,0,朋友:2;亲属:7;仇人:65,-1,0\r\n";
+            "999,沈.浣溪,女,仙霞派,默认,副掌门,-1,稳重,聪颖,38,平常/善良,内功/剑法,医术/学识,无影乱剑,聪慧;剑气;军师;内家;倾国倾城,映潭仙子,0,0,亲属:7;朋友:2;夫妻:1;仇人:65,-1,0\r\n";
 
         private static readonly string DefaultSpeHeroFaceCsv =
             SpeHeroFaceHeader + "\r\n" +
-            "171,姜.映潭,1,10,10,10,10,10,10,0,-1\r\n";
+            "999,沈.浣溪,8,50,50,54,3,2,11,-1,7\r\n";
 
         private static readonly string DefaultPortraitLayoutCsv =
-            PortraitLayoutHeader + "\r\n" +
-            "171,姜.映潭,1.00,20,-120,1.00,0,0,1.00,0,0,1.00,0,0,1.00,0,0\r\n";
+            PortraitLayoutHeader + "\r\n";
 
         private static LoadedConfigData _cachedSpeHeroConfig = LoadedConfigData.Empty;
         private static LoadedConfigData _cachedSpeHeroFaceConfig = LoadedConfigData.Empty;
@@ -191,7 +190,7 @@ namespace LongYinCustomSpeHeroData
                     File.WriteAllText(SamplePackPortraitLayoutConfigPath, DefaultPortraitLayoutCsv, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
                     LOG.Msg($"未检测到任何特殊人物配置，已自动生成示例配置：{SamplePackSpeHeroConfigPath}");
                     LOG.Msg($"已自动生成示例配置：{SamplePackSpeHeroFaceConfigPath}");
-                    LOG.Msg($"已自动生成示例配置：{SamplePackPortraitLayoutConfigPath}");
+                    LOG.Msg($"已自动生成空立绘布局表：{SamplePackPortraitLayoutConfigPath}");
                     LOG.Msg("已同时创建示例立绘目录：UserData\\LongYinCustomSpeHeroData\\Data\\000\\Portraits");
                 }
 

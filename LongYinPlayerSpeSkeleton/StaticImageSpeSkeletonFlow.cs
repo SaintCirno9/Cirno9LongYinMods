@@ -376,7 +376,7 @@ namespace LongYinPlayerSpeSkeleton
             contentImage.color = Color.white;
             contentImage.enabled = true;
 
-            EnsureRootMask(portraitRect, enabled: CanUseRootMask(portraitRect));
+            EnsureRootMask(portraitRect, enabled: CanUseRootMask(portraitRect) && !IsDialoguePortraitContext(targetSkeletonParent));
             contentImage.preserveAspect = false;
             StaticImageSceneConfig sceneConfig = Main.GetStaticImageSceneConfig(targetSkeletonParent);
             LogGenericPortraitContext(targetSkeletonParent, portraitRect, referenceLayoutInfo, sceneConfig);
@@ -393,6 +393,19 @@ namespace LongYinPlayerSpeSkeleton
             Vector3 localPosition = sourceRect.localPosition;
             Vector3 localScale = sourceRect.localScale;
             return $"reference={sourceTransform.gameObject.name}, referenceRect=({sourceRect.rect.width}, {sourceRect.rect.height}), referenceAnchored=({sourceRect.anchoredPosition3D.x}, {sourceRect.anchoredPosition3D.y}, {sourceRect.anchoredPosition3D.z}), referenceLocal=({localPosition.x}, {localPosition.y}, {localPosition.z}), referenceScale=({localScale.x}, {localScale.y}, {localScale.z})";
+        }
+
+        private static bool IsDialoguePortraitContext(Transform targetSkeletonParent)
+        {
+            if (targetSkeletonParent == null)
+            {
+                return false;
+            }
+
+            string path = Main.BuildTransformPath(targetSkeletonParent);
+            return path.Contains("/PlotPanel/", StringComparison.Ordinal) ||
+                   path.Contains("/TalkPanel/", StringComparison.Ordinal) ||
+                   path.Contains("/HeroTalkUIPanel/", StringComparison.Ordinal);
         }
 
         private static void LogGenericPortraitContext(Transform targetSkeletonParent, RectTransform portraitRect, string referenceLayoutInfo, StaticImageSceneConfig sceneConfig)

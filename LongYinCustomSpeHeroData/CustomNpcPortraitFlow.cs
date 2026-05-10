@@ -371,15 +371,9 @@ namespace LongYinCustomSpeHeroData
 
         private static bool IsDialoguePortraitContext(Transform targetSkeletonParent)
         {
-            if (targetSkeletonParent == null)
-            {
-                return false;
-            }
-
-            string path = Main.BuildTransformPath(targetSkeletonParent);
-            return path.Contains("/PlotPanel/", StringComparison.Ordinal) ||
-                   path.Contains("/TalkPanel/", StringComparison.Ordinal) ||
-                   path.Contains("/HeroTalkUIPanel/", StringComparison.Ordinal);
+            return HasAncestorNamed(targetSkeletonParent, "PlotPanel", 8) ||
+                   HasAncestorNamed(targetSkeletonParent, "TalkPanel", 8) ||
+                   HasAncestorNamed(targetSkeletonParent, "HeroTalkUIPanel", 8);
         }
 
         private static Vector2 GetReferenceRectSize(RectTransform portraitRect)
@@ -441,12 +435,8 @@ namespace LongYinCustomSpeHeroData
 
         private static bool IsHeroDetailContext(Transform targetSkeletonParent)
         {
-            if (targetSkeletonParent == null)
-            {
-                return false;
-            }
-
-            return Main.BuildTransformPath(targetSkeletonParent).Contains("/HeroDetailPanel/Face", StringComparison.Ordinal);
+            return HasName(targetSkeletonParent, "Face") &&
+                   HasAncestorNamed(targetSkeletonParent, "HeroDetailPanel", 4);
         }
 
         private static bool IsCardPortraitContext(Transform targetSkeletonParent)
@@ -456,32 +446,31 @@ namespace LongYinCustomSpeHeroData
 
         private static bool IsHeroIconContext(Transform targetSkeletonParent)
         {
+            if (!HasName(targetSkeletonParent, "Back"))
+            {
+                return false;
+            }
+
+            if (HasAncestorNamed(targetSkeletonParent, "HeroIcon(Clone)", 2))
+            {
+                return true;
+            }
+
             if (!IsSmallBackPortraitContext(targetSkeletonParent))
             {
                 return false;
             }
 
-            Transform cardRoot = targetSkeletonParent.parent;
-            Transform content = cardRoot != null ? cardRoot.parent : null;
-            Transform viewport = content != null ? content.parent : null;
-
-            return cardRoot != null &&
-                   content != null &&
-                   viewport != null &&
-                   string.Equals(content.gameObject.name, "Content", StringComparison.Ordinal) &&
-                   string.Equals(viewport.gameObject.name, "Viewport", StringComparison.Ordinal);
+            Transform parent = targetSkeletonParent.parent;
+            Transform grandParent = parent != null ? parent.parent : null;
+            Transform greatGrandParent = grandParent != null ? grandParent.parent : null;
+            return HasName(grandParent, "Content") && HasName(greatGrandParent, "Viewport");
         }
 
         private static bool IsBattleTeamHeroIconContext(Transform targetSkeletonParent)
         {
-            if (targetSkeletonParent == null)
-            {
-                return false;
-            }
-
-            string path = Main.BuildTransformPath(targetSkeletonParent);
-            return path.Contains("/BattleTeamHeroIcon(Clone)/", StringComparison.Ordinal) &&
-                   IsSmallBackPortraitContext(targetSkeletonParent);
+            return IsHeroIconContext(targetSkeletonParent) &&
+                   HasAncestorNamed(targetSkeletonParent, "BattleTeamHeroIcon(Clone)", 8);
         }
 
         private static bool IsSmallBackPortraitContext(Transform targetSkeletonParent)
@@ -504,12 +493,32 @@ namespace LongYinCustomSpeHeroData
 
         private static bool IsBattleNowActiveHeroContext(Transform targetSkeletonParent)
         {
-            if (targetSkeletonParent == null)
+            return HasName(targetSkeletonParent, "HeroSkeleton") &&
+                   HasAncestorNamed(targetSkeletonParent, "NowActiveHero", 4) &&
+                   HasAncestorNamed(targetSkeletonParent, "BattleUIPanel", 8);
+        }
+
+        private static bool HasAncestorNamed(Transform transform, string name, int maxDepth)
+        {
+            Transform current = transform;
+            for (int depth = 0; depth <= maxDepth && current != null; depth++)
             {
-                return false;
+                if (HasName(current, name))
+                {
+                    return true;
+                }
+
+                current = current.parent;
             }
 
-            return Main.BuildTransformPath(targetSkeletonParent).EndsWith("/BattleUIPanel/NowActiveHero/HeroSkeleton", StringComparison.Ordinal);
+            return false;
+        }
+
+        private static bool HasName(Transform transform, string name)
+        {
+            return transform != null &&
+                   transform.gameObject != null &&
+                   string.Equals(transform.gameObject.name, name, StringComparison.Ordinal);
         }
 
     }

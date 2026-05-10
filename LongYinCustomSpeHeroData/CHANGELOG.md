@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.4.0
+
+- 首次生成的 `Data\000\PortraitLayout.csv` 现在只包含表头，不再默认启用示例人物的立绘替换。
+- 默认示例人物更新为 `沈.浣溪`，并同步更新 `SpeHeroData.csv` 与 `SpeHeroFaceData.csv` 示例内容。
+- 自动生成示例配置时，日志会明确提示 `PortraitLayout.csv` 是空立绘布局表。
+- 立绘场景识别改为按父级节点名称判断，减少 UI 路径变化导致详情、对话、卡片和战斗立绘场景识别失效的情况。
+
 ## 2.3.0
 
 - `SpeHeroData.csv` 的 `关系设定` 现在支持填写 `夫妻:id`，例如 `夫妻:172`。
