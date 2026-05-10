@@ -15,7 +15,7 @@
    - `UserData\LongYinCustomSpeHeroData\Data\000\SpeHeroFaceData.csv`
    - `UserData\LongYinCustomSpeHeroData\Data\000\PortraitLayout.csv`
    - `UserData\LongYinCustomSpeHeroData\Data\000\Portraits`
-3. 如果第一次启动时没有检测到任何配置，Mod 会自动生成：
+3. 如果第一次启动时没有检测到任何配置，且 `Data\000` 不存在，Mod 会自动生成：
    - `Data\000\SpeHeroData.csv`
    - `Data\000\SpeHeroFaceData.csv`
    - `Data\000\PortraitLayout.csv`
@@ -35,6 +35,7 @@
    - `id` 小于等于原版最大特殊人物 `id` 时，视为覆盖原版人物
    - `id` 大于原版最大特殊人物 `id` 时，视为新增人物；Mod 会自动分配连续运行时 `id`
    - 新增人物的 `SpeHeroFaceData.csv`、`PortraitLayout.csv` 和图片文件名仍然填写原配置 `id`
+   - `关系设定` 额外支持 `夫妻:id`，`id` 填写原配置 `id`，例如 `夫妻:172`
 7. `SpeHeroFaceData.csv` 对应 `GameData/SpeHeroFaceData`。
 8. 多个 `Data\数字目录` 会按数字从小到大加载，例如 `000 -> 010 -> 100`。
 9. 如果多个配置文件里出现相同 `id`：

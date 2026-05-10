@@ -11,7 +11,7 @@ using Il2CppInterop.Runtime;
 using MelonLoader;
 using UnityEngine;
 
-[assembly: MelonInfo(typeof(LongYinCustomSpeHeroData.Main), "LongYinCustomSpeHeroData", "2.2.1", "SaintCirno9", null)]
+[assembly: MelonInfo(typeof(LongYinCustomSpeHeroData.Main), "LongYinCustomSpeHeroData", "2.3.0", "SaintCirno9", null)]
 [assembly: MelonGame("TppStudio", "LongYinLiZhiZhuan")]
 
 namespace LongYinCustomSpeHeroData
@@ -134,6 +134,7 @@ namespace LongYinCustomSpeHeroData
         private static readonly HashSet<string> PortraitWarnings = new(StringComparer.OrdinalIgnoreCase);
         private static readonly HashSet<int> PortraitAppliedLogHeroIds = new();
         private static readonly HashSet<string> CsvWriteWarnings = new(StringComparer.OrdinalIgnoreCase);
+        private static readonly HashSet<string> SpouseRelationWarnings = new(StringComparer.Ordinal);
         private static bool _legacyStructureWarningShown;
 
         public static readonly MelonLogger.Instance LOG = Melon<Main>.Logger;
@@ -181,7 +182,7 @@ namespace LongYinCustomSpeHeroData
                             " 图片 -> UserData\\LongYinCustomSpeHeroData\\Data\\000\\Portraits");
                     }
                 }
-                else if (!HasAnyDataPackConfig())
+                else if (!Directory.Exists(SamplePackDir) && !HasAnyDataPackConfig())
                 {
                     Directory.CreateDirectory(SamplePackDir);
                     Directory.CreateDirectory(SamplePackPortraitsDir);
@@ -1189,6 +1190,7 @@ namespace LongYinCustomSpeHeroData
             string[] customHeaders = SplitCsvLine(customLines[0]);
             int vanillaIdCol = FindColumnIndex(vanillaHeaders, "id");
             int customIdCol = FindColumnIndex(customHeaders, "id");
+            int customRelationCol = FindColumnIndex(customHeaders, "关系设定");
             if (vanillaIdCol < 0 || customIdCol < 0)
             {
                 ResetRuntimeHeroIdMap();
@@ -1229,6 +1231,8 @@ namespace LongYinCustomSpeHeroData
                     continue;
                 }
 
+                StripCustomSpouseRelation(cells, customRelationCol);
+                line = BuildCsvLine(cells);
                 if (sourceHeroId <= vanillaMaxId)
                 {
                     overrideById[id] = line;
@@ -1284,6 +1288,7 @@ namespace LongYinCustomSpeHeroData
 
                 int runtimeHeroId = nextRuntimeHeroId++;
                 cells[vanillaIdCol] = runtimeHeroId.ToString(CultureInfo.InvariantCulture);
+                StripCustomSpouseRelation(cells, customRelationCol);
                 outputLines.Add(BuildCsvLine(cells));
                 RegisterRuntimeHeroId(sourceHeroId, runtimeHeroId);
                 appendedCount++;
@@ -1294,6 +1299,33 @@ namespace LongYinCustomSpeHeroData
             return changed
                 ? new MergeResult(true, mergedText, replacedCount, appendedCount)
                 : MergeResult.NoChange;
+        }
+
+        private static void StripCustomSpouseRelation(string[] cells, int relationColumnIndex)
+        {
+            if (cells == null || relationColumnIndex < 0 || relationColumnIndex >= cells.Length)
+            {
+                return;
+            }
+
+            string relationText = cells[relationColumnIndex];
+            if (string.IsNullOrWhiteSpace(relationText) || !relationText.Contains("夫妻", StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            string[] keptRelations = relationText
+                .Split(';')
+                .Where(part => !IsCustomSpouseRelationPart(part))
+                .ToArray();
+            cells[relationColumnIndex] = string.Join(";", keptRelations);
+        }
+
+        private static bool IsCustomSpouseRelationPart(string relationPart)
+        {
+            string[] relationCells = (relationPart ?? string.Empty).Split(':');
+            return relationCells.Length > 0 &&
+                   string.Equals(relationCells[0].Trim(), "夫妻", StringComparison.Ordinal);
         }
 
         private static MergeResult BuildMergedSpeHeroFaceCsvText(string vanillaText, LoadedConfigData configData, string tableName)
@@ -1487,6 +1519,176 @@ namespace LongYinCustomSpeHeroData
             }
 
             return maxId;
+        }
+
+        internal static void ApplyCustomSpouseRelations(GameDataController gameData)
+        {
+            if (gameData?.SpeHeroDataBase == null)
+            {
+                return;
+            }
+
+            LoadedConfigData speHeroConfig = LoadSpeHeroConfig();
+            if (!speHeroConfig.Valid || string.IsNullOrWhiteSpace(speHeroConfig.CsvText))
+            {
+                return;
+            }
+
+            string[] lines = speHeroConfig.CsvText.Replace("\uFEFF", "").Split(new[] { "\r\n", "\n" }, StringSplitOptions.None);
+            if (lines.Length <= 1)
+            {
+                return;
+            }
+
+            string[] headers = SplitCsvLine(lines[0]);
+            int idColumnIndex = FindColumnIndex(headers, "id");
+            int relationColumnIndex = FindColumnIndex(headers, "关系设定");
+            if (idColumnIndex < 0 || relationColumnIndex < 0)
+            {
+                return;
+            }
+
+            Dictionary<int, HeroData> speHeroesById = BuildSpeHeroesById(gameData);
+            var spouseByHeroId = new Dictionary<int, int>();
+            foreach (string rawLine in lines.Skip(1))
+            {
+                string line = rawLine.Trim();
+                if (string.IsNullOrWhiteSpace(line) || line.StartsWith('#'))
+                {
+                    continue;
+                }
+
+                string[] cells = SplitCsvLine(line);
+                if (!int.TryParse(GetCell(cells, idColumnIndex), NumberStyles.Integer, CultureInfo.InvariantCulture, out int sourceHeroId))
+                {
+                    continue;
+                }
+
+                int runtimeHeroId = GetRuntimeHeroId(sourceHeroId);
+                if (!speHeroesById.ContainsKey(runtimeHeroId))
+                {
+                    WarnSpouseRelationOnce($"夫妻关系设定未找到来源角色：sourceID={sourceHeroId}, runtimeID={runtimeHeroId}");
+                    continue;
+                }
+
+                foreach (int targetSourceHeroId in ParseSpouseTargetIds(GetCell(cells, relationColumnIndex)))
+                {
+                    int targetRuntimeHeroId = GetRuntimeHeroId(targetSourceHeroId);
+                    if (targetRuntimeHeroId == runtimeHeroId)
+                    {
+                        WarnSpouseRelationOnce($"夫妻关系设定不能指向自身：sourceID={sourceHeroId}");
+                        continue;
+                    }
+
+                    if (!speHeroesById.TryGetValue(targetRuntimeHeroId, out HeroData targetHero))
+                    {
+                        WarnSpouseRelationOnce($"夫妻关系设定未找到目标角色：sourceID={sourceHeroId}, targetSourceID={targetSourceHeroId}, targetRuntimeID={targetRuntimeHeroId}");
+                        continue;
+                    }
+
+                    TryRegisterSpouseRelation(spouseByHeroId, runtimeHeroId, targetRuntimeHeroId, sourceHeroId, targetSourceHeroId);
+                }
+            }
+
+            int appliedCount = 0;
+            foreach (var pair in spouseByHeroId)
+            {
+                if (pair.Key > pair.Value)
+                {
+                    continue;
+                }
+
+                SetBaseSpouseRelation(speHeroesById[pair.Key], speHeroesById[pair.Value]);
+                appliedCount++;
+            }
+
+            if (appliedCount > 0)
+            {
+                LOG.Msg($"已应用自定义夫妻关系设定 {appliedCount} 条。");
+            }
+        }
+
+        private static Dictionary<int, HeroData> BuildSpeHeroesById(GameDataController gameData)
+        {
+            var heroesById = new Dictionary<int, HeroData>();
+            for (int i = 0; i < gameData.SpeHeroDataBase.Count; i++)
+            {
+                HeroData heroData = gameData.SpeHeroDataBase[i];
+                if (heroData != null)
+                {
+                    heroesById[heroData.heroID] = heroData;
+                }
+            }
+
+            return heroesById;
+        }
+
+        private static int GetRuntimeHeroId(int sourceHeroId)
+        {
+            return SourceHeroIdToRuntimeHeroId.TryGetValue(sourceHeroId, out int runtimeHeroId)
+                ? runtimeHeroId
+                : sourceHeroId;
+        }
+
+        private static void TryRegisterSpouseRelation(Dictionary<int, int> spouseByHeroId, int runtimeHeroId, int targetRuntimeHeroId, int sourceHeroId, int targetSourceHeroId)
+        {
+            if (spouseByHeroId.TryGetValue(runtimeHeroId, out int existingTargetHeroId) && existingTargetHeroId != targetRuntimeHeroId)
+            {
+                WarnSpouseRelationOnce($"夫妻关系设定冲突，已跳过：sourceID={sourceHeroId}, targetSourceID={targetSourceHeroId}");
+                return;
+            }
+
+            if (spouseByHeroId.TryGetValue(targetRuntimeHeroId, out int existingSourceHeroId) && existingSourceHeroId != runtimeHeroId)
+            {
+                WarnSpouseRelationOnce($"夫妻关系设定冲突，已跳过：sourceID={sourceHeroId}, targetSourceID={targetSourceHeroId}");
+                return;
+            }
+
+            spouseByHeroId[runtimeHeroId] = targetRuntimeHeroId;
+            spouseByHeroId[targetRuntimeHeroId] = runtimeHeroId;
+        }
+
+        private static IEnumerable<int> ParseSpouseTargetIds(string relationText)
+        {
+            if (string.IsNullOrWhiteSpace(relationText))
+            {
+                yield break;
+            }
+
+            foreach (string relationPart in relationText.Split(';'))
+            {
+                string[] relationCells = relationPart.Split(':');
+                if (!IsCustomSpouseRelationPart(relationPart) || relationCells.Length != 2)
+                {
+                    continue;
+                }
+
+                foreach (string targetIdText in relationCells[1].Split('/'))
+                {
+                    if (int.TryParse(targetIdText.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out int targetHeroId))
+                    {
+                        yield return targetHeroId;
+                    }
+                }
+            }
+        }
+
+        private static void SetBaseSpouseRelation(HeroData sourceHero, HeroData targetHero)
+        {
+            sourceHero.Lover = targetHero.heroID;
+            targetHero.Lover = sourceHero.heroID;
+            sourceHero.Friends?.Remove(targetHero.heroID);
+            targetHero.Friends?.Remove(sourceHero.heroID);
+            sourceHero.PreLovers?.Remove(targetHero.heroID);
+            targetHero.PreLovers?.Remove(sourceHero.heroID);
+        }
+
+        private static void WarnSpouseRelationOnce(string message)
+        {
+            if (SpouseRelationWarnings.Add(message))
+            {
+                LOG.Warning(message);
+            }
         }
 
         private static string NormalizeCsvRow(string[] canonicalHeaders, string[] sourceHeaders, string[] sourceCells)
@@ -1931,6 +2133,16 @@ namespace LongYinCustomSpeHeroData
 
                 return false;
             }
+        }
+    }
+
+    [HarmonyPatch(typeof(GameDataController), nameof(GameDataController.LoadAllGameData))]
+    public static class GameDataControllerLoadAllGameDataPatch
+    {
+        [HarmonyPostfix]
+        public static void Postfix(GameDataController __instance)
+        {
+            Main.ApplyCustomSpouseRelations(__instance);
         }
     }
 
