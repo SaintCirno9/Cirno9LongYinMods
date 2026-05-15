@@ -11,7 +11,7 @@ using Il2CppInterop.Runtime;
 using MelonLoader;
 using UnityEngine;
 
-[assembly: MelonInfo(typeof(LongYinCustomSpeHeroData.Main), "LongYinCustomSpeHeroData", "2.4.0", "SaintCirno9", null)]
+[assembly: MelonInfo(typeof(LongYinCustomSpeHeroData.Main), "LongYinCustomSpeHeroData", "2.5.0", "SaintCirno9", null)]
 [assembly: MelonGame("TppStudio", "LongYinLiZhiZhuan")]
 
 namespace LongYinCustomSpeHeroData
@@ -93,8 +93,7 @@ namespace LongYinCustomSpeHeroData
 
         private const string SpeHeroHeader = "id,名字,性别,门派,武学流派,等级,实力等级,性格,资质,年龄,立场,擅长武学,擅长技艺,绝学,标签,绰号,隐藏,出师角色,关系设定,皮肤ID,特殊skeleton";
         private const string SpeHeroFaceHeader = "id,名字,脸,眼,眉,发,嘴,鼻,发后,男胡,杂";
-        private const string LegacyPortraitLayoutHeader = "id,通用缩放,通用偏移X,通用偏移Y,详情缩放,详情偏移X,详情偏移Y,卡片缩放,卡片偏移X,卡片偏移Y,战斗卡片缩放,战斗卡片偏移X,战斗卡片偏移Y,战斗立绘缩放,战斗立绘偏移X,战斗立绘偏移Y";
-        private const string PortraitLayoutHeader = "id,名字,通用缩放,通用偏移X,通用偏移Y,详情缩放,详情偏移X,详情偏移Y,卡片缩放,卡片偏移X,卡片偏移Y,战斗卡片缩放,战斗卡片偏移X,战斗卡片偏移Y,战斗立绘缩放,战斗立绘偏移X,战斗立绘偏移Y";
+        private const string PortraitLayoutHeader = "id,名字,通用缩放,通用偏移X,通用偏移Y";
         private const string DefaultModConfigText =
             "# 是否允许所有特殊人物可招募\r\n" +
             "# true=允许，false=保持游戏原版逻辑\r\n" +
@@ -285,7 +284,7 @@ namespace LongYinCustomSpeHeroData
                 string[] lines = normalized.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None);
                 if (lines.Length == 0 || string.IsNullOrWhiteSpace(lines[0]))
                 {
-                    if (TryWriteAllTextUtf8(path, PortraitLayoutHeader + "\r\n" + normalized))
+                    if (TryWritePortraitLayoutTextUtf8(path, content, PortraitLayoutHeader + "\r\n" + normalized))
                     {
                         LOG.Warning($"检测到 CSV 表头缺失，已自动修复：{path}");
                     }
@@ -301,7 +300,7 @@ namespace LongYinCustomSpeHeroData
 
                 if (FindColumnIndex(sourceHeaders, "id") < 0)
                 {
-                    if (TryWriteAllTextUtf8(path, PortraitLayoutHeader + "\r\n" + normalized))
+                    if (TryWritePortraitLayoutTextUtf8(path, content, PortraitLayoutHeader + "\r\n" + normalized))
                     {
                         LOG.Warning($"检测到 CSV 表头缺失，已自动修复：{path}");
                     }
@@ -339,7 +338,7 @@ namespace LongYinCustomSpeHeroData
                     outputLines.Add(BuildCsvLine(normalizedCells));
                 }
 
-                if (TryWriteAllTextUtf8(path, string.Join("\r\n", outputLines) + "\r\n"))
+                if (TryWritePortraitLayoutTextUtf8(path, content, string.Join("\r\n", outputLines) + "\r\n"))
                 {
                     LOG.Warning($"已同步立绘布局 CSV 表头顺序：{path}");
                 }
@@ -363,6 +362,40 @@ namespace LongYinCustomSpeHeroData
             }
 
             return string.Empty;
+        }
+
+        private static bool TryWritePortraitLayoutTextUtf8(string path, string originalContent, string newContent)
+        {
+            if (string.Equals(originalContent, newContent, StringComparison.Ordinal))
+            {
+                return true;
+            }
+
+            if (!TryBackupPortraitLayoutFile(path, originalContent))
+            {
+                return false;
+            }
+
+            return TryWriteAllTextUtf8(path, newContent);
+        }
+
+        private static bool TryBackupPortraitLayoutFile(string path, string content)
+        {
+            try
+            {
+                string directory = Path.GetDirectoryName(path);
+                string fileName = Path.GetFileName(path);
+                string timestamp = DateTime.Now.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture);
+                string backupPath = Path.Combine(directory ?? string.Empty, $"{fileName}.bak-{timestamp}");
+                File.WriteAllText(backupPath, content, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
+                LOG.Warning($"已备份原始立绘布局 CSV：{backupPath}");
+                return true;
+            }
+            catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException)
+            {
+                LOG.Warning($"备份立绘布局 CSV 失败，已跳过自动写回：{path}，{ex.GetType().Name} - {ex.Message}");
+                return false;
+            }
         }
 
         internal static void EnsureCsvHeaderExists(string path, string header)
@@ -1039,13 +1072,10 @@ namespace LongYinCustomSpeHeroData
 
         private static PortraitLayoutConfig BuildPortraitLayoutConfig(string[] headers, string[] cells, PortraitConfigOrigin origin, string heroName)
         {
+            PortraitSceneLayoutOverride fallback = BuildPortraitSceneLayoutOverride(headers, cells, "通用");
             return new PortraitLayoutConfig(
                 heroName,
-                BuildPortraitSceneLayoutOverride(headers, cells, "详情"),
-                BuildPortraitSceneLayoutOverride(headers, cells, "卡片"),
-                BuildPortraitSceneLayoutOverride(headers, cells, "战斗卡片"),
-                BuildPortraitSceneLayoutOverride(headers, cells, "战斗立绘"),
-                BuildPortraitSceneLayoutOverride(headers, cells, "通用"),
+                fallback,
                 origin);
         }
 
@@ -2214,22 +2244,16 @@ namespace LongYinCustomSpeHeroData
     {
         [HarmonyPrefix]
         [HarmonyPriority(Priority.Low)]
-        private static bool Prefix(HeroData __instance, Transform targetSkeletonParent)
+        private static void Prefix(Transform targetSkeletonParent)
         {
             CustomNpcPortraitFlow.HideNpcStaticPortraitOnly(targetSkeletonParent);
+        }
 
-            if (__instance == null || __instance.heroID == 0 || __instance.isSummon)
-            {
-                return true;
-            }
-
-            if (CustomNpcPortraitFlow.TryApplyCustomPortrait(__instance, targetSkeletonParent))
-            {
-                return false;
-            }
-
-            CustomNpcPortraitFlow.RestoreOriginalDisplay(targetSkeletonParent);
-            return true;
+        [HarmonyPostfix]
+        [HarmonyPriority(Priority.Low)]
+        private static void Postfix(HeroData __instance, Transform targetSkeletonParent)
+        {
+            CustomNpcPortraitFlow.TryApplyCustomPortrait(__instance, targetSkeletonParent);
         }
     }
 

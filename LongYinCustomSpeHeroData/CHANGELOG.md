@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.5.0
+
+- 自定义立绘布局改为以目标 UI 容器作为裁切边界，并按原版 `SkeletonGraphic` 显示框缩放图片。
+- `PortraitLayout.csv` 运行时只使用通用缩放与通用偏移；旧场景列不再参与当前布局计算。
+- `PortraitLayout.csv` 自动规范化表头时只保留 `id,名字,通用缩放,通用偏移X,通用偏移Y`，并会先在同目录备份原始文件。
+
 ## 2.4.0
 
 - 首次生成的 `Data\000\PortraitLayout.csv` 现在只包含表头，不再默认启用示例人物的立绘替换。
