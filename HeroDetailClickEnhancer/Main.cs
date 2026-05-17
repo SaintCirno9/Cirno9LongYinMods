@@ -5,7 +5,7 @@ using UnityEngine;
 using UnityEngine.Events;
 using UnityEngine.UI;
 
-[assembly: MelonInfo(typeof(HeroDetailClickEnhancer.Main), "HeroDetailClickEnhancer", "1.0.0", "SaintCirno9", null)]
+[assembly: MelonInfo(typeof(HeroDetailClickEnhancer.Main), "HeroDetailClickEnhancer", "1.1.0", "SaintCirno9", null)]
 [assembly: MelonGame("TppStudio", "LongYinLiZhiZhuan")]
 
 namespace HeroDetailClickEnhancer
@@ -90,6 +90,20 @@ namespace HeroDetailClickEnhancer
             button.onClick.AddListener((UnityAction)(() => OpenHeroDetail(heroData)));
         }
 
+        internal static void EnableForceDetailHeroIcons(ForceDetailController controller)
+        {
+            if (controller?.forceHeroGrid == null)
+            {
+                return;
+            }
+
+            HeroIconController[] controllers = controller.forceHeroGrid.GetComponentsInChildren<HeroIconController>(true);
+            foreach (HeroIconController iconController in controllers)
+            {
+                EnableHeroIconDetail(iconController, true);
+            }
+        }
+
         internal static void TryRefreshRemoteTalkButton(HeroDetailController controller)
         {
             if (controller == null || _remoteInteractHero == null || controller.mainShowHero != _remoteInteractHero)
@@ -118,9 +132,33 @@ namespace HeroDetailClickEnhancer
             HeroData heroData = _remoteInteractHero;
             HeroSearchController.Instance?.HideHeroSearch();
             ForceHeroSettingController.Instance?.HideForceHeroSettingUI();
+            ForceDetailController.Instance?.HideForceDetail();
             controller.UnshowHeroDetail();
             PlotController.Instance?.ShowHeroInteractUI(heroData);
             return true;
+        }
+
+        private static void EnableHeroIconDetail(HeroIconController controller, bool allowDetailType)
+        {
+            if (controller == null || controller.heroData == null)
+            {
+                return;
+            }
+
+            if (controller.heroIconType != HeroIconType.show && (!allowDetailType || controller.heroIconType != HeroIconType.detail))
+            {
+                return;
+            }
+
+            Button button = controller.GetComponent<Button>();
+            if (button == null)
+            {
+                button = controller.gameObject.AddComponent<Button>();
+            }
+
+            HeroData heroData = controller.heroData;
+            button.onClick = new Button.ButtonClickedEvent();
+            button.onClick.AddListener((UnityAction)(() => OpenHeroDetail(heroData)));
         }
 
         private static void EnableRemoteTalkButton(HeroDetailController controller)
@@ -155,6 +193,16 @@ namespace HeroDetailClickEnhancer
 
             HeroIconController controller = __instance.temp.GetComponent<HeroIconController>();
             HeroDetailClickService.EnableHeroIconDetail(controller);
+        }
+    }
+
+    [HarmonyPatch(typeof(ForceDetailController), nameof(ForceDetailController.ShowForceDetail))]
+    internal static class ForceDetailControllerShowForceDetailPatch
+    {
+        [HarmonyPostfix]
+        private static void Postfix(ForceDetailController __instance)
+        {
+            HeroDetailClickService.EnableForceDetailHeroIcons(__instance);
         }
     }
 
