@@ -141,53 +141,136 @@ namespace LongYinPlayerSpeSkeleton
             return ClampStaticImageSceneConfig(_genericPortraitStaticImageConfig.ApplyAdjustment(adjustmentConfig));
         }
 
-        private static StaticImageSceneConfig GetStaticImageSceneAdjustmentConfig(Transform targetSkeletonParent)
+        internal static StaticImageSceneConfig GetStaticImageSceneAdjustmentConfig(Transform targetSkeletonParent)
         {
             if (targetSkeletonParent == null)
             {
                 return DefaultPortraitAdjustmentConfig;
             }
 
-            string path = BuildTransformPath(targetSkeletonParent);
-            if (path.StartsWith("Canvas/StartMenu/", StringComparison.Ordinal))
+            if (IsCharacterCreationContext(targetSkeletonParent))
             {
                 return _characterCreationStaticImageAdjustmentConfig;
             }
 
-            if (path.EndsWith("/BattleUIPanel/NowActiveHero/HeroSkeleton", StringComparison.Ordinal))
+            if (IsBattleNowActiveHeroContext(targetSkeletonParent))
             {
                 return _battlePortraitStaticImageAdjustmentConfig;
             }
 
-            if (path.Contains("/BattleTeamHeroIcon(Clone)/", StringComparison.Ordinal) &&
-                path.EndsWith("/HeroIcon(Clone)/Back", StringComparison.Ordinal))
+            if (IsBattleTeamHeroIconContext(targetSkeletonParent))
             {
                 return _battleCardPortraitStaticImageAdjustmentConfig;
             }
 
-            if (path.EndsWith("/HeroIcon(Clone)/Back", StringComparison.Ordinal))
+            if (IsHeroIconBackContext(targetSkeletonParent))
             {
                 return _cardPortraitStaticImageAdjustmentConfig;
             }
 
-            if (path.Contains("/HudPanel/FaceMask/Face", StringComparison.Ordinal))
+            if (IsHudAvatarPortraitContext(targetSkeletonParent))
             {
                 return _hudAvatarStaticImageAdjustmentConfig;
             }
 
-            if (path.Contains("/HeroDetailPanel/Face", StringComparison.Ordinal))
+            if (IsHeroDetailPortraitContext(targetSkeletonParent))
             {
                 return _heroDetailStaticImageAdjustmentConfig;
             }
 
-            if (path.Contains("/PlotPanel/", StringComparison.Ordinal) ||
-                path.Contains("/TalkPanel/", StringComparison.Ordinal) ||
-                path.Contains("/HeroTalkUIPanel/", StringComparison.Ordinal))
+            if (IsDialoguePortraitContext(targetSkeletonParent))
             {
                 return _dialoguePortraitStaticImageAdjustmentConfig;
             }
 
             return DefaultPortraitAdjustmentConfig;
+        }
+
+        internal static bool IsHeroDetailPortraitContext(Transform targetSkeletonParent)
+        {
+            return HasName(targetSkeletonParent, "Face") &&
+                   HasAncestorNamed(targetSkeletonParent, "HeroDetailPanel", 4);
+        }
+
+        internal static bool IsHudAvatarPortraitContext(Transform targetSkeletonParent)
+        {
+            return HasName(targetSkeletonParent, "Face") &&
+                   HasAncestorNamed(targetSkeletonParent, "FaceMask", 2) &&
+                   HasAncestorNamed(targetSkeletonParent, "HudPanel", 4);
+        }
+
+        internal static bool IsHeroIconBackContext(Transform targetSkeletonParent)
+        {
+            if (!HasName(targetSkeletonParent, "Back"))
+            {
+                return false;
+            }
+
+            if (HasAncestorNamed(targetSkeletonParent, "HeroIcon(Clone)", 2))
+            {
+                return true;
+            }
+
+            RectTransform rectTransform = targetSkeletonParent.TryCast<RectTransform>();
+            if (rectTransform == null)
+            {
+                return false;
+            }
+
+            float width = Mathf.Abs(rectTransform.rect.width);
+            float height = Mathf.Abs(rectTransform.rect.height);
+            if (width <= 0f || width > 180f || height <= 0f || height > 220f)
+            {
+                return false;
+            }
+
+            Transform parent = targetSkeletonParent.parent;
+            Transform grandParent = parent != null ? parent.parent : null;
+            Transform greatGrandParent = grandParent != null ? grandParent.parent : null;
+            return HasName(grandParent, "Content") && HasName(greatGrandParent, "Viewport");
+        }
+
+        internal static bool IsBattleTeamHeroIconContext(Transform targetSkeletonParent)
+        {
+            return IsHeroIconBackContext(targetSkeletonParent) &&
+                   HasAncestorNamed(targetSkeletonParent, "BattleTeamHeroIcon(Clone)", 8);
+        }
+
+        internal static bool IsBattleNowActiveHeroContext(Transform targetSkeletonParent)
+        {
+            return HasName(targetSkeletonParent, "HeroSkeleton") &&
+                   HasAncestorNamed(targetSkeletonParent, "NowActiveHero", 4) &&
+                   HasAncestorNamed(targetSkeletonParent, "BattleUIPanel", 8);
+        }
+
+        internal static bool IsDialoguePortraitContext(Transform targetSkeletonParent)
+        {
+            return HasAncestorNamed(targetSkeletonParent, "PlotPanel", 8) ||
+                   HasAncestorNamed(targetSkeletonParent, "TalkPanel", 8) ||
+                   HasAncestorNamed(targetSkeletonParent, "HeroTalkUIPanel", 8);
+        }
+
+        private static bool HasAncestorNamed(Transform transform, string name, int maxDepth)
+        {
+            Transform current = transform;
+            for (int depth = 0; depth <= maxDepth && current != null; depth++)
+            {
+                if (HasName(current, name))
+                {
+                    return true;
+                }
+
+                current = current.parent;
+            }
+
+            return false;
+        }
+
+        private static bool HasName(Transform transform, string name)
+        {
+            return transform != null &&
+                   transform.gameObject != null &&
+                   string.Equals(transform.gameObject.name, name, StringComparison.Ordinal);
         }
 
         internal static void EnsureConfigLoaded()

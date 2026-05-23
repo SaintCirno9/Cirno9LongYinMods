@@ -52,8 +52,8 @@
 8. `StaticImageGenericPortraitOffsetX=20`
    - `StaticImageGenericPortraitOffsetY=-120`
    - 所有静态肖像的通用额外偏移。
-   - Mod 会按原版立绘参考框大小自动换算不同界面的实际偏移，并继续保留原版节点的缩放和镜像。
-9. 各路径增量配置
+   - Mod 会先复制当前界面原版骨骼节点的布局，再按当前原版框高度缩放通用偏移，并继续保留原版节点的缩放和镜像。
+9. 各场景增量配置
    - 支持以下前缀：
      - `StaticImageHeroDetail`
      - `StaticImageCharacterCreation`
@@ -64,7 +64,7 @@
      - `StaticImageDialoguePortrait`
    - 每组都有 `InsetRatio`、`OffsetX`、`OffsetY` 三项。
    - 默认值为 `InsetRatio=1`、`OffsetX=0`、`OffsetY=0`，表示不额外修正。
-   - 最终缩放为“通用缩放 * 路径缩放”，最终偏移为“通用偏移 + 路径额外偏移”，再交给 Mod 按当前界面的原版布局自动换算。
+   - 最终缩放为“通用缩放 * 场景缩放”，最终偏移为“按当前原版框高度缩放后的通用偏移 + 场景额外偏移”。
 
 【注意事项】
 1. 如果当前还没捕获到 `GameData/SpeHeroData`，控制台会提示暂时无法按名字解析。
