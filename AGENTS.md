@@ -1,7 +1,7 @@
 # Repository Guidelines
 
 ## 项目结构与模块组织
-此仓库同时是 `MelonLoader` 的实际 `Mods` 目录和开发工作区。根目录下的 `*.dll` 会被游戏直接加载，不要因为它们像构建产物就移动或清理。各模组通常使用“同名目录 + 根目录 DLL”结构，例如 `ForcePermissionTweaks/` 存放源码、`ForcePermissionTweaks.dll` 存放运行产物。典型项目目录包含 `Main.cs`、`*.csproj`、`README.txt`，部分模组还会拆分 `*Config.cs`、补丁文件或资源文件。`GameSource/` 仅放脚本与逆向说明，`Unity-Mod/` 主要是旧样例和参考工程。
+此仓库同时是 `MelonLoader` 的实际 `Mods` 目录和开发工作区。根目录下的 `*.dll` 会被游戏直接加载，不要因为它们像构建产物就移动或清理。各模组通常使用“同名目录 + 根目录 DLL”结构，例如 `ForcePermissionTweaks/` 存放源码、`ForcePermissionTweaks.dll` 存放运行产物。典型项目目录包含 `Main.cs`、`*.csproj`、`README.txt`，部分模组还会拆分 `*Config.cs`、补丁文件或资源文件。`GameSource/` 存放 Il2CppDumper 导出的 `dump.cs`、`il2cpp.h`、`script.json`、`stringliteral.json` 和 `DummyDll/`，`Unity-Mod/` 主要是旧样例和参考工程。
 
 ## 构建、测试与开发命令
 优先按单个模组构建，不要假设仓库存在统一解决方案。
@@ -9,7 +9,6 @@
 ```powershell
 dotnet build ".\ForcePermissionTweaks\ForcePermissionTweaks.csproj"
 dotnet build ".\MailFilter\MailFilter.csproj"
-pwsh ".\GameSource\Extract-DllApi.ps1" -DllPath "..\MelonLoader\Il2CppAssemblies\Assembly-CSharp.dll"
 ```
 
 大多数 `.csproj` 会把 DLL 直接输出到仓库根目录，并在项目目录下生成版本化 zip；`LongYinGameplayTweaks` 目前只输出 DLL。仓库没有统一自动化测试工程，默认验证方式是：单项目构建成功，再进行游戏内最小回归。
@@ -27,7 +26,7 @@ Git 历史采用简洁的 Conventional Commits，常见前缀为 `feat:` 和 `fi
 在 PowerShell 中执行搜索或批量命令时，始终显式提供路径并使用双引号，例如 `rg "MelonInfo" ".\ForcePermissionTweaks"`。这能避免误扫整个游戏目录，也符合仓库现有工作流。
 
 ## 可用 Dump 文件
-- 游戏导出的主 Dump 文件位于仓库相对路径：`.\GameSource\Dump\dump.cs`
+- 游戏导出的主 Dump 文件位于仓库相对路径：`.\GameSource\dump.cs`
 - 需要查找游戏类型、方法签名、字段、枚举或 IL2CPP 导出结构时，优先查看该文件。
 
 ## 源码查看方式
