@@ -11,7 +11,7 @@ using Il2CppInterop.Runtime;
 using Il2CppSystem.Collections.Generic;
 using UnityEngine;
 
-[assembly: MelonInfo(typeof(LongYinCustomKungfuSkill.Main), "LongYinCustomKungfuSkill", "2.4.0", "SaintCirno9", null)]
+[assembly: MelonInfo(typeof(LongYinCustomKungfuSkill.Main), "LongYinCustomKungfuSkill", "2.4.2", "SaintCirno9", null)]
 [assembly: MelonGame("TppStudio", "LongYinLiZhiZhuan")]
 
 namespace LongYinCustomKungfuSkill
@@ -322,7 +322,10 @@ namespace LongYinCustomKungfuSkill
 
         internal static void AddCustomSkillsToJianghuBookPool(GameDataController gameData)
         {
-            if (gameData?.kungfuSkillDataList == null || InjectedCustomSkillIds.Count == 0)
+            if (gameData?.kungfuSkillDataList == null ||
+                !gameData.kungfuSkillDataList.TryGetValue(-1, out List<List<KungfuSkillData>> jianghuPools) ||
+                jianghuPools == null ||
+                InjectedCustomSkillIds.Count == 0)
             {
                 return;
             }
@@ -337,7 +340,12 @@ namespace LongYinCustomKungfuSkill
                 }
 
                 int rareLv = Math.Clamp(skillData.rareLv, 0, 5);
-                List<KungfuSkillData> jianghuPool = gameData.kungfuSkillDataList[0][rareLv];
+                if (rareLv >= jianghuPools.Count)
+                {
+                    continue;
+                }
+
+                List<KungfuSkillData> jianghuPool = jianghuPools[rareLv];
                 if (jianghuPool == null || ContainsSkillId(jianghuPool, skillData.skillID))
                 {
                     continue;

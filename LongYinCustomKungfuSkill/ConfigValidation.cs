@@ -21,6 +21,7 @@ namespace LongYinCustomKungfuSkill
             SummonId = Main.FindColumnIndex(headers, "召唤ID");
             UseCount = Main.FindColumnIndex(headers, "使用次数");
             Action = Main.FindColumnIndex(headers, "动作");
+            Effect = Main.FindColumnIndex(headers, "特效");
             DamageOrder = Main.FindColumnIndex(headers, "伤害顺序");
             AutoMove = Main.FindColumnIndex(headers, "角色位移");
             Trail = Main.FindColumnIndex(headers, "Trail");
@@ -41,6 +42,7 @@ namespace LongYinCustomKungfuSkill
         public int SummonId { get; }
         public int UseCount { get; }
         public int Action { get; }
+        public int Effect { get; }
         public int DamageOrder { get; }
         public int AutoMove { get; }
         public int Trail { get; }
@@ -218,6 +220,12 @@ namespace LongYinCustomKungfuSkill
                     return false;
                 }
 
+                if (!ValidateSemicolonListField(cells, map.Effect))
+                {
+                    LogInvalidRow(sourceName, rowNum, $"特效格式无效：{Main.GetCell(cells, map.Effect)}");
+                    return false;
+                }
+
                 string autoMove = Main.GetCell(cells, map.AutoMove);
                 if (!ValidAutoMoveValues.Contains(autoMove))
                 {
@@ -305,6 +313,26 @@ namespace LongYinCustomKungfuSkill
             foreach (string part in parts)
             {
                 if (!int.TryParse(part.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out _))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        private static bool ValidateSemicolonListField(string[] cells, int index)
+        {
+            string text = Main.GetCell(cells, index);
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                return true;
+            }
+
+            string[] parts = text.Split(';');
+            foreach (string part in parts)
+            {
+                if (string.IsNullOrWhiteSpace(part))
                 {
                     return false;
                 }
