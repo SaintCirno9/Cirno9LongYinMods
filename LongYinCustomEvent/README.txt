@@ -41,4 +41,4 @@
 
 【发布文件】
 1. DLL：`LongYinCustomEvent.dll`
-2. 压缩包：`LongYinCustomEvent-v1.2.0.zip`
+2. 压缩包：`LongYinCustomEvent-v0.0.1.zip`

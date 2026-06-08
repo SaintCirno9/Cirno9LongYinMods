@@ -7,7 +7,7 @@ using MelonLoader;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Serialization;
 
-[assembly: MelonInfo(typeof(LongYinCustomEvent.Main), "LongYinCustomEvent", "1.2.0", "SaintCirno9", null)]
+[assembly: MelonInfo(typeof(LongYinCustomEvent.Main), "LongYinCustomEvent", "0.0.1", "SaintCirno9", null)]
 [assembly: MelonGame("TppStudio", "LongYinLiZhiZhuan")]
 
 namespace LongYinCustomEvent
