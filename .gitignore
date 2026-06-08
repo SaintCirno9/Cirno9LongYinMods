@@ -33,8 +33,6 @@ packages/
 Dump/
 参考资料/
 
-# GameSource 目录仅保留脚本和说明文档
-GameSource/**
-!GameSource/
-!GameSource/Extract-DllApi.ps1
-!GameSource/README.md
+# 本地导出和自定义数据目录，不纳入仓库
+GameSource/
+CustomGameData/
