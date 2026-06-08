@@ -10,7 +10,7 @@ using UnityEngine;
 using UnityEngine.Events;
 using UnityEngine.UI;
 
-[assembly: MelonInfo(typeof(MailFilter.Main), "MailFilter", "1.0.1", "SaintCirno9", null)]
+[assembly: MelonInfo(typeof(MailFilter.Main), "MailFilter", "1.1.0", "SaintCirno9", null)]
 [assembly: MelonGame("TppStudio", "LongYinLiZhiZhuan")]
 
 namespace MailFilter
@@ -589,7 +589,7 @@ namespace MailFilter
             Main.Log.Msg($"已过滤来信：类型={Main.GetMailCategoryName(__state.MailCategory)}，发送者={__state.SenderName}，关系={Main.GetRelationLevelName(__state.SenderRelation)}，标题={__state.MailTitle}，好感度={__state.SenderFavor}");
         }
 
-        private static HeroData ResolveSourceHero(WorldData worldData, MailData targetMail, HeroData sourceHero)
+        internal static HeroData ResolveSourceHero(WorldData worldData, MailData targetMail, HeroData sourceHero)
         {
             if (sourceHero != null)
             {
@@ -781,7 +781,7 @@ namespace MailFilter
                 && ContainsAny(mailText, "望掌门亲往协助防御", "现令各部弟子速速前去支援", "还望各路门客尽快前去支援");
         }
 
-        private static HeroRelationLevel GetRelationLevel(WorldData worldData, HeroData sourceHero)
+        internal static HeroRelationLevel GetRelationLevel(WorldData worldData, HeroData sourceHero)
         {
             HeroData player = worldData?.Player();
             if (player == null || sourceHero == null)
@@ -843,6 +843,32 @@ namespace MailFilter
                 }
             }
 
+            return false;
+        }
+    }
+
+    [HarmonyPatch(typeof(InfoController), nameof(InfoController.AddMail))]
+    public static class MailFilterAddMailPatch
+    {
+        [HarmonyPrefix]
+        public static bool Prefix(MailData newMail)
+        {
+            GameController gameController = GameController.Instance;
+            WorldData worldData = gameController?.worldData;
+            HeroData sourceHero = MailFilterPatch.ResolveSourceHero(worldData, newMail, null);
+            MailCategory mailCategory = MailFilterPatch.RecognizeMailCategory(worldData, newMail, sourceHero);
+            HeroRelationLevel senderRelation = MailFilterPatch.GetRelationLevel(worldData, sourceHero);
+            bool senderInterestingStar = sourceHero != null && sourceHero.interestingStar;
+
+            if (senderInterestingStar || !Main.ShouldFilterCategory(mailCategory, senderRelation))
+            {
+                return true;
+            }
+
+            string senderName = string.IsNullOrEmpty(sourceHero?.heroName) ? "系统" : sourceHero.heroName;
+            string mailTitle = string.IsNullOrEmpty(newMail?.mailTitle) ? "未命名信件" : newMail.mailTitle;
+            float senderFavor = sourceHero?.Favor(false) ?? 0f;
+            Main.Log.Msg($"已在入队前过滤来信：类型={Main.GetMailCategoryName(mailCategory)}，发送者={senderName}，关系={Main.GetRelationLevelName(senderRelation)}，标题={mailTitle}，好感度={senderFavor}");
             return false;
         }
     }

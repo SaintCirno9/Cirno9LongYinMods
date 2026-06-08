@@ -106,7 +106,7 @@ MailFilter
 - 游戏内面板使用左右箭头切换状态，顺序为：`不拦截 -> 直接拦截 -> 保留>=无特殊关系 -> ... -> 保留>=恋人`。
 
 说明：
-1. 本 Mod 的拦截点是 `GameController.GetNewMail`，因此会影响走统一收信入口的常规 NPC 来信。
+1. 本 Mod 的拦截点是 `InfoController.AddMail` 和 `GameController.GetNewMail`，因此会影响走统一收信入口的常规 NPC 来信。
 2. 当前识别规则已覆盖 `ManageMonthTask` 里的常规月信、`AIController.SetAIStuff(aiStuffType == 13)` 生成的两类求援信、NPC 入狱后发来的探望信，以及部分门派事务/势力攻防类自动邮件。
 3. 游戏内配置入口位于“信笺”页签打开后的左侧，点击“过滤”即可展开面板，按 `Esc` 可直接关闭面板。
 4. 关系判定优先级为：`恋人 > 前任 > 亲属 > 结义 > 师徒 > 友人 > 仇敌 > 无特殊关系`。
@@ -118,4 +118,4 @@ MailFilter
 
 发布文件：
 1. DLL：`MailFilter.dll`
-2. 压缩包：`MailFilter-v1.0.1.zip`
+2. 压缩包：`MailFilter-v1.1.0.zip`
