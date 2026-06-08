@@ -11,7 +11,7 @@ using Il2CppInterop.Runtime;
 using MelonLoader;
 using UnityEngine;
 
-[assembly: MelonInfo(typeof(LongYinCustomSpeHeroData.Main), "LongYinCustomSpeHeroData", "2.5.0", "SaintCirno9", null)]
+[assembly: MelonInfo(typeof(LongYinCustomSpeHeroData.Main), "LongYinCustomSpeHeroData", "2.5.1", "SaintCirno9", null)]
 [assembly: MelonGame("TppStudio", "LongYinLiZhiZhuan")]
 
 namespace LongYinCustomSpeHeroData
@@ -104,12 +104,10 @@ namespace LongYinCustomSpeHeroData
             "EnableVerboseLog=false\r\n";
 
         private static readonly string DefaultSpeHeroCsv =
-            SpeHeroHeader + "\r\n" +
-            "999,沈.浣溪,女,仙霞派,默认,副掌门,-1,稳重,聪颖,38,平常/善良,内功/剑法,医术/学识,无影乱剑,聪慧;剑气;军师;内家;倾国倾城,映潭仙子,0,0,亲属:7;朋友:2;夫妻:1;仇人:65,-1,0\r\n";
+            SpeHeroHeader + "\r\n";
 
         private static readonly string DefaultSpeHeroFaceCsv =
-            SpeHeroFaceHeader + "\r\n" +
-            "999,沈.浣溪,8,50,50,54,3,2,11,-1,7\r\n";
+            SpeHeroFaceHeader + "\r\n";
 
         private static readonly string DefaultPortraitLayoutCsv =
             PortraitLayoutHeader + "\r\n";
@@ -187,8 +185,8 @@ namespace LongYinCustomSpeHeroData
                     File.WriteAllText(SamplePackSpeHeroConfigPath, DefaultSpeHeroCsv, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
                     File.WriteAllText(SamplePackSpeHeroFaceConfigPath, DefaultSpeHeroFaceCsv, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
                     File.WriteAllText(SamplePackPortraitLayoutConfigPath, DefaultPortraitLayoutCsv, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
-                    LOG.Msg($"未检测到任何特殊人物配置，已自动生成示例配置：{SamplePackSpeHeroConfigPath}");
-                    LOG.Msg($"已自动生成示例配置：{SamplePackSpeHeroFaceConfigPath}");
+                    LOG.Msg($"未检测到任何特殊人物配置，已自动生成空特殊人物配置表：{SamplePackSpeHeroConfigPath}");
+                    LOG.Msg($"已自动生成空特殊人物脸数据表：{SamplePackSpeHeroFaceConfigPath}");
                     LOG.Msg($"已自动生成空立绘布局表：{SamplePackPortraitLayoutConfigPath}");
                     LOG.Msg("已同时创建示例立绘目录：UserData\\LongYinCustomSpeHeroData\\Data\\000\\Portraits");
                 }

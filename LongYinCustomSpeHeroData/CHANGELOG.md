@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.5.1
+
+- 首次自动生成的 `Data\000\SpeHeroData.csv` 和 `Data\000\SpeHeroFaceData.csv` 现在只包含表头，不再默认新增示例人物。
+- 保留首次启动时自动生成默认配置文件、空 CSV、空立绘布局表和 `Portraits` 目录的能力。
+
 ## 2.5.0
 
 - 自定义立绘布局改为以目标 UI 容器作为裁切边界，并按原版 `SkeletonGraphic` 显示框缩放图片。
