@@ -2,12 +2,15 @@
 .NOTES
     Author: SaintCirno9
 #>
-param([string]$GameRootDir)
+param(
+    [string]$GameRootDir,
+    [string]$DumperPath
+)
 $ErrorActionPreference = "Stop"
 
 . (Join-Path $PSScriptRoot "Get-GameRoot.ps1")
 $gameRoot = Get-LongYinGameRoot $GameRootDir
-$dumperPath = "<Il2CppDumper目录>\Il2CppDumper.exe"
+$DumperPath = Get-LongYinSetting -Name 'IL2CPP_DUMPER_PATH' -Value $DumperPath
 $gameAssemblyPath = Join-Path $gameRoot "GameAssembly.dll"
 $metadataPath = Join-Path $gameRoot "LongYinLiZhiZhuan_Data\il2cpp_data\Metadata\global-metadata.dat"
 $repositoryRoot = Split-Path -Parent $PSScriptRoot

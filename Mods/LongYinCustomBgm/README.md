@@ -10,19 +10,17 @@
 ## 安装说明
 
 1. 本 Mod 依赖 MelonLoader。
-2. 发布包已经包含完整目录结构，直接解压到游戏根目录即可。
+2. 发布包已经包含完整目录结构，直接解压到游戏根目录即可。发布包不附带战败音频文件，需要自行准备 `FightLose.ogg`（见下文）。
 3. 解压后会包含：
 
    - `Mods\LongYinCustomBgm.dll`
    - `UserData\LongYinCustomBgm\LongYinCustomBgm.cfg`
-   - `UserData\LongYinCustomBgm\Audio\`
 
 ## 首次启动后生成的目录
 
-1. 如果你直接使用发布包解压，这些目录和文件会一并提供。
-2. 如果目录不存在，Mod 在首次启动时也会自动创建 `UserData\LongYinCustomBgm`。
-3. 配置文件路径：`UserData\LongYinCustomBgm\LongYinCustomBgm.cfg`
-4. 音频目录路径：`UserData\LongYinCustomBgm\Audio`
+1. 首次启动时，如果目录不存在，Mod 会自动创建 `UserData\LongYinCustomBgm` 和 `Audio` 目录。
+2. 配置文件路径：`UserData\LongYinCustomBgm\LongYinCustomBgm.cfg`
+3. 音频目录路径：`UserData\LongYinCustomBgm\Audio`
 
 ## 替换战败音乐的用法
 
@@ -33,6 +31,7 @@
 2. 默认配置会读取这个路径，并在“玩家战败后切回地图/场景 BGM”时播放它。
 3. 如果你想改路径，可以修改 `LongYinCustomBgm.cfg` 里的 `FightLoseFile`。
 4. 当前推荐优先使用 `ogg` 文件。
+5. 仓库和发布包不附带战败音频，请使用你有权使用的音频文件。
 
 ## 配置项说明
 
@@ -56,7 +55,7 @@
 
 1. 当前版本不是直接拦截游戏内某个固定的 `FightLose` 曲名。
 2. 实际替换时机是：玩家战败后，游戏第一次准备切回场景音乐时，将该场景曲替换为你的自定义战败曲。
-3. 若替换未生效，请先确认音频文件存在，再将 `VerboseLogging` 改为 `true` 查看 MelonLoader 日志。
+3. 若替换未生效，请先确认音频文件存在。文件缺失时，日志会输出 `未找到自定义战败音乐文件` 警告，游戏继续播放原版音乐。仍需排查时，可将 `VerboseLogging` 改为 `true` 查看 MelonLoader 日志。
 
 ## 实现流程图
 

@@ -15,7 +15,7 @@ LimitedInvincible
 2. 将 `LimitedInvincible.dll` 放到游戏 `Mods` 目录。
 
 配置：
-1. 配置文件路径：`<游戏目录>\UserData\LimitedInvincible.cfg`
+1. 配置文件路径：游戏目录下的 `UserData\LimitedInvincible.cfg`
 2. 如果配置文件不存在，mod 启动时会自动生成默认配置。
 3. 当前支持的配置项：
 - `EnableLimitedInvincible=true`

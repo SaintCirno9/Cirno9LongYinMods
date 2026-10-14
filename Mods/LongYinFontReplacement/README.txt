@@ -7,13 +7,14 @@
 4. 不修改游戏原版资源文件，删除 Mod 后即可回退原版显示。
 
 【安装】
-1. 将 DLL 包里的 `LongYinFontReplacement.dll` 放到游戏 `Mods` 目录。
-2. 将 UserData 包解压到游戏根目录。
-3. 确认文件位置类似下面这样：
+1. 将发布包里的 `LongYinFontReplacement.dll` 放到游戏 `Mods` 目录。
+2. 启动一次游戏。如果 `UserData\LongYinFontReplacement` 不存在，Mod 会自动创建默认配置目录和 `FontMappings.txt`。
+3. 发布包不附带字体文件。请自行获取 TTF 字体并确认其授权，放到 `UserData\LongYinFontReplacement\Fonts`。
+4. 按需修改 `FontMappings.txt`，确认文件位置类似下面这样：
    - `Mods\LongYinFontReplacement.dll`
    - `UserData\LongYinFontReplacement\FontMappings.txt`
    - `UserData\LongYinFontReplacement\Fonts\猫啃网糖圆体.ttf`
-4. 启动游戏。如果 `UserData\LongYinFontReplacement` 不存在，Mod 会自动创建默认配置目录。
+5. 重新启动游戏。
 
 【配置文件】
 配置文件位置：

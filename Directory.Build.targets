@@ -1,6 +1,7 @@
 <Project>
   <Target Name="CheckLongYinGameReferences" BeforeTargets="ResolveAssemblyReferences">
-    <Error Condition="!Exists('$(GameRootPath)MelonLoader\net6\MelonLoader.dll')" Text="找不到 MelonLoader：$(GameRootPath)。请配置 GamePaths.local.props 或传入 -p:GameRootDir。" />
+    <Error Condition="'$(GameRootDir)' == ''" Text="未配置游戏路径。请将 .env.example 复制为 .env，填写 LONGYIN_GAME_ROOT；也可传入 -p:GameRootDir。" />
+    <Error Condition="!Exists('$(GameRootPath)MelonLoader\net6\MelonLoader.dll')" Text="找不到 MelonLoader：$(GameRootPath)。请配置 .env 中的 LONGYIN_GAME_ROOT 或传入 -p:GameRootDir。" />
   </Target>
   <Target Name="DeployLongYinMod" AfterTargets="Build" Condition="'$(DeployMods)' == 'true'">
     <Exec Command="pwsh -NoProfile -File &quot;$(RepositoryRoot)Scripts\Deploy-Mod.ps1&quot; -ModName &quot;$(MSBuildProjectName)&quot; -Configuration &quot;$(Configuration)&quot; -GameRootDir &quot;$(GameRootPath).&quot; -NoBuild" />

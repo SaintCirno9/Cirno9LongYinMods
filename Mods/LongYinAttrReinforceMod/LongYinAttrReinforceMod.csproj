@@ -79,6 +79,7 @@
     <RemoveDir Directories="$(PackageTempDir)" />
     <MakeDir Directories="$(PackageTempDir)" />
     <Copy SourceFiles="@(PackageFiles)" DestinationFolder="$(PackageTempDir)" />
+    <Copy SourceFiles="@(ModLicenseFiles)" DestinationFolder="$(PackageTempDir)" />
     <Delete Files="$(PackageZipPath)" Condition="Exists('$(PackageZipPath)')" />
     <ZipDirectory SourceDirectory="$(PackageTempDir)" DestinationFile="$(PackageZipPath)" Overwrite="true" />
     <RemoveDir Directories="$(PackageTempDir)" />

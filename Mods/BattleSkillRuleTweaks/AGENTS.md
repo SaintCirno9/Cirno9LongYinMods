@@ -16,7 +16,7 @@
 
 遇到疑似游戏更新导致的问题时，不要直接猜测偏移。按以下顺序确认：
 
-1. 查看 `..\..\GameSource\dump.cs` 中 `BattleController` 的字段布局，确认 `originUnitData`、`nowActiveUnitMoved`、`nowActiveUnitAttacked`、`nowActiveState` 的最新偏移。
+1. 查看仓库根目录的 `GameSource\dump.cs`（本地导出，不提交）中 `BattleController` 的字段布局，确认 `originUnitData`、`nowActiveUnitMoved`、`nowActiveUnitAttacked`、`nowActiveState` 的最新偏移。
 2. 如 `dump.cs` 无法确认，使用 IDA 查看 `BattleController.RegretMove`、`BattleController.RunBattle`、`BattleUnit.EnterGrid` 的实际读写位置。
 3. 更新 `Main.cs` 中对应的已知偏移常量，确保日志中的 old/new 对照仍有参考价值。
 4. 执行 `dotnet build ".\BattleSkillRuleTweaks.csproj"` 验证构建。

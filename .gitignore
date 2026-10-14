@@ -41,5 +41,17 @@ CustomGameData/
 Artifacts/
 .cache/
 External/
-GamePaths.local.props
 .vscode/
+
+# 本机配置、私人资料与凭据
+Private/
+.appdata/
+.env
+.env.*
+!.env.example
+*.local.props
+*.local.json
+*.pem
+*.key
+*.pfx
+*.p12

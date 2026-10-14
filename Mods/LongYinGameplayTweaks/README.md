@@ -1,6 +1,6 @@
 # LongYinGameplayTweaks
 
-这是一个基于 MelonLoader 的 mod，用于调整《龙隐离之传》的多项玩法参数。
+这是一个基于 MelonLoader 的 mod，用于调整《龙胤立志传》的多项玩法参数。
 
 ## 功能
 - 调整突破选项的属性收益

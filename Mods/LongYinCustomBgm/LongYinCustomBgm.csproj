@@ -99,6 +99,7 @@
     <MakeDir Directories="$(PackageTempDir)\Mods" />
     <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(PackageTempDir)\Mods" />
     <Copy SourceFiles="$(MSBuildProjectDirectory)\README.md" DestinationFolder="$(PackageTempDir)" />
+    <Copy SourceFiles="@(ModLicenseFiles)" DestinationFolder="$(PackageTempDir)" />
     <Copy
       SourceFiles="@(PackageUserDataFiles)"
       DestinationFiles="@(PackageUserDataFiles->'$(PackageTempDir)\UserData\LongYinCustomBgm\%(RecursiveDir)%(Filename)%(Extension)')" />
