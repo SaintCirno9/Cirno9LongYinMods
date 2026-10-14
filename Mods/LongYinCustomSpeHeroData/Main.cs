@@ -11,7 +11,7 @@ using Il2CppInterop.Runtime;
 using MelonLoader;
 using UnityEngine;
 
-[assembly: MelonInfo(typeof(LongYinCustomSpeHeroData.Main), "LongYinCustomSpeHeroData", "2.5.1", "SaintCirno9", null)]
+[assembly: MelonInfo(typeof(LongYinCustomSpeHeroData.Main), "LongYinCustomSpeHeroData", "2.5.2", "SaintCirno9", null)]
 [assembly: MelonGame("TppStudio", "LongYinLiZhiZhuan")]
 
 namespace LongYinCustomSpeHeroData
@@ -1638,9 +1638,14 @@ namespace LongYinCustomSpeHeroData
         private static Dictionary<int, HeroData> BuildSpeHeroesById(GameDataController gameData)
         {
             var heroesById = new Dictionary<int, HeroData>();
-            for (int i = 0; i < gameData.SpeHeroDataBase.Count; i++)
+            if (gameData?.SpeHeroDataBase == null)
             {
-                HeroData heroData = gameData.SpeHeroDataBase[i];
+                return heroesById;
+            }
+
+            foreach (var pair in gameData.SpeHeroDataBase)
+            {
+                HeroData heroData = pair.Value;
                 if (heroData != null)
                 {
                     heroesById[heroData.heroID] = heroData;

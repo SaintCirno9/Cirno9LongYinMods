@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.5.2
+
+- 适配游戏版本更新：`GameDataController.SpeHeroDataBase` 数据结构由 `List<HeroData>` 变更为 `Dictionary<int, HeroData>`，修复夫妻关系设定加载时的 `MissingMethodException` 异常。
+
 ## 2.5.1
 
 - 首次自动生成的 `Data\000\SpeHeroData.csv` 和 `Data\000\SpeHeroFaceData.csv` 现在只包含表头，不再默认新增示例人物。
