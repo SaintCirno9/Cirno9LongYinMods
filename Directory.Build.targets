@@ -1,0 +1,8 @@
+<Project>
+  <Target Name="CheckLongYinGameReferences" BeforeTargets="ResolveAssemblyReferences">
+    <Error Condition="!Exists('$(GameRootPath)MelonLoader\net6\MelonLoader.dll')" Text="找不到 MelonLoader：$(GameRootPath)。请配置 GamePaths.local.props 或传入 -p:GameRootDir。" />
+  </Target>
+  <Target Name="DeployLongYinMod" AfterTargets="Build" Condition="'$(DeployMods)' == 'true'">
+    <Exec Command="pwsh -NoProfile -File &quot;$(RepositoryRoot)Scripts\Deploy-Mod.ps1&quot; -ModName &quot;$(MSBuildProjectName)&quot; -Configuration &quot;$(Configuration)&quot; -GameRootDir &quot;$(GameRootPath).&quot; -NoBuild" />
+  </Target>
+</Project>

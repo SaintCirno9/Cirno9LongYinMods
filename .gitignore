@@ -36,3 +36,10 @@ Dump/
 # 本地导出和自定义数据目录，不纳入仓库
 GameSource/
 CustomGameData/
+
+# 独立开发工作区
+Artifacts/
+.cache/
+External/
+GamePaths.local.props
+.vscode/

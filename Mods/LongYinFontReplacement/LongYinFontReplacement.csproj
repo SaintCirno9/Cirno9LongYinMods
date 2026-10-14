@@ -1,0 +1,102 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net6.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <AssemblyName>LongYinFontReplacement</AssemblyName>
+    <RootNamespace>LongYinFontReplacement</RootNamespace>
+    <OutputPath>$(ArtifactsDir)bin\$(MSBuildProjectName)\$(Configuration)\</OutputPath>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <DebugType>none</DebugType>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <GenerateDependencyFile>false</GenerateDependencyFile>
+    <PackageTempDir>$(BaseIntermediateOutputPath)package\</PackageTempDir>
+    <PackageDllZipPath>$(MSBuildProjectDirectory)\LongYinFontReplacement-Dll.zip</PackageDllZipPath>
+    <PackageUserDataZipPath>$(MSBuildProjectDirectory)\LongYinFontReplacement-UserData.zip</PackageUserDataZipPath>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="MelonLoader">
+      <HintPath>$(GameRootPath)MelonLoader\net6\MelonLoader.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="UnityEngine.CoreModule">
+      <HintPath>$(GameRootPath)MelonLoader\Il2CppAssemblies\UnityEngine.CoreModule.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="UnityEngine.TextRenderingModule">
+      <HintPath>$(GameRootPath)MelonLoader\Il2CppAssemblies\UnityEngine.TextRenderingModule.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="UnityEngine.UI">
+      <HintPath>$(GameRootPath)MelonLoader\Il2CppAssemblies\UnityEngine.UI.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Assembly-CSharp">
+      <HintPath>$(GameRootPath)MelonLoader\Il2CppAssemblies\Assembly-CSharp.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="0Harmony">
+      <HintPath>$(GameRootPath)MelonLoader\net6\0Harmony.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Il2Cppmscorlib">
+      <HintPath>$(GameRootPath)MelonLoader\Il2CppAssemblies\Il2Cppmscorlib.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Il2CppInterop.Runtime">
+      <HintPath>$(GameRootPath)MelonLoader\net6\Il2CppInterop.Runtime.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+  </ItemGroup>
+
+  <UsingTask TaskName="ReadModVersion" TaskFactory="RoslynCodeTaskFactory" AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll">
+    <ParameterGroup>
+      <SourceFile ParameterType="System.String" Required="true" />
+      <ModVersion ParameterType="System.String" Output="true" />
+    </ParameterGroup>
+    <Task>
+      <Using Namespace="System.IO" />
+      <Using Namespace="System.Text.RegularExpressions" />
+      <Code Type="Fragment" Language="cs">
+        <![CDATA[
+          string content = File.ReadAllText(SourceFile);
+          var match = Regex.Match(content, @"MelonInfo\(.*?,\s*""[^""]*""\s*,\s*""([^""]+)""");
+          ModVersion = match.Success ? match.Groups[1].Value : "1.0.0";
+        ]]>
+      </Code>
+    </Task>
+  </UsingTask>
+
+  <Target Name="PackageBuildOutput" AfterTargets="Build">
+    <MakeDir Directories="$(ArtifactsDir)packages" />
+    <ReadModVersion SourceFile="$(MSBuildProjectDirectory)\Main.cs">
+      <Output TaskParameter="ModVersion" PropertyName="ModVersion" />
+    </ReadModVersion>
+    <PropertyGroup>
+      <PackageDllZipPath>$(MSBuildProjectDirectory)\LongYinFontReplacement-Dll-v$(ModVersion).zip</PackageDllZipPath>
+      <PackageUserDataZipPath>$(MSBuildProjectDirectory)\LongYinFontReplacement-UserData-v$(ModVersion).zip</PackageUserDataZipPath>
+      <LegacyPackageZipPath>$(MSBuildProjectDirectory)\LongYinFontReplacement-v$(ModVersion).zip</LegacyPackageZipPath>
+      <PackageDllDir>$(PackageTempDir)Dll\</PackageDllDir>
+      <PackageUserDataRootDir>$(PackageTempDir)UserDataPackage\</PackageUserDataRootDir>
+      <PackageUserDataDir>$(PackageUserDataRootDir)UserData\LongYinFontReplacement\</PackageUserDataDir>
+    </PropertyGroup>
+    <ItemGroup>
+      <PackageUserDataFiles Include="$(MSBuildProjectDirectory)\..\..\UserData\LongYinFontReplacement\**\*.*" Exclude="$(MSBuildProjectDirectory)\..\..\UserData\LongYinFontReplacement\RuntimeFonts\**\*.*" />
+    </ItemGroup>
+    <RemoveDir Directories="$(PackageTempDir)" />
+    <MakeDir Directories="$(PackageDllDir)" />
+    <MakeDir Directories="$(PackageUserDataDir)" />
+    <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(PackageDllDir)" />
+    <Copy SourceFiles="$(MSBuildProjectDirectory)\README.txt" DestinationFolder="$(PackageDllDir)" />
+    <Copy SourceFiles="@(PackageUserDataFiles)" DestinationFolder="$(PackageUserDataDir)%(RecursiveDir)" />
+    <Delete Files="$(PackageDllZipPath)" Condition="Exists('$(PackageDllZipPath)')" />
+    <Delete Files="$(PackageUserDataZipPath)" Condition="Exists('$(PackageUserDataZipPath)')" />
+    <Delete Files="$(LegacyPackageZipPath)" Condition="Exists('$(LegacyPackageZipPath)')" />
+    <ZipDirectory SourceDirectory="$(PackageDllDir)" DestinationFile="$(PackageDllZipPath)" Overwrite="true" />
+    <ZipDirectory SourceDirectory="$(PackageUserDataRootDir)" DestinationFile="$(PackageUserDataZipPath)" Overwrite="true" />
+    <RemoveDir Directories="$(PackageTempDir)" />
+    <Message Text="DLL 打包完成：$(PackageDllZipPath)" Importance="high" />
+    <Message Text="UserData 打包完成：$(PackageUserDataZipPath)" Importance="high" />
+  </Target>
+</Project>

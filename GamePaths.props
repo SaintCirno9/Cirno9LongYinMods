@@ -1,0 +1,5 @@
+<Project>
+  <PropertyGroup>
+    <GameRootDir Condition="'$(GameRootDir)' == ''"><游戏目录>\</GameRootDir>
+  </PropertyGroup>
+</Project>

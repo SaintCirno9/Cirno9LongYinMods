@@ -1,0 +1,13 @@
+<Project>
+  <PropertyGroup>
+    <RepositoryRoot>$(MSBuildThisFileDirectory)</RepositoryRoot>
+    <ArtifactsDir>$(RepositoryRoot)Artifacts\</ArtifactsDir>
+    <Authors>SaintCirno9</Authors>
+    <DeployMods Condition="'$(DeployMods)' == ''">true</DeployMods>
+  </PropertyGroup>
+  <Import Project="$(RepositoryRoot)GamePaths.props" />
+  <Import Project="$(RepositoryRoot)GamePaths.local.props" Condition="Exists('$(RepositoryRoot)GamePaths.local.props')" />
+  <PropertyGroup>
+    <GameRootPath>$([MSBuild]::EnsureTrailingSlash('$(GameRootDir)'))</GameRootPath>
+  </PropertyGroup>
+</Project>

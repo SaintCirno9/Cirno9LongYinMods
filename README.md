@@ -1,111 +1,70 @@
-# LongYinLiZhiZhuan Mods 仓库
+# Cirno9 LongYin Mods
 
-这个目录既是 `MelonLoader` 实际读取的 `Mods` 目录，也是当前各个 Mod 的本地开发工作区。
+SaintCirno9 维护的龙胤立志传 MelonLoader 模组开发仓库。工作区位于 `<用户目录>\Documents\Cirno9LongYinMods`，游戏的 `Mods` 目录仅保存运行 DLL。
 
-因此仓库里会同时存在两类内容：
+## 目录
 
-- 根目录下可被 `MelonLoader` 直接加载的 `.dll`
-- 各个同名子目录下的源码、文档、打包脚本与发布包
+| 目录 / 文件 | 用途 |
+| --- | --- |
+| `Mods/<模组名>/` | 独立工程、源码、玩家说明、发布资源；保留工程内部原有布局 |
+| `Scripts/` | 部署、游戏 Dump 更新与验证脚本 |
+| `Tools/` | IDA 导入等开发工具 |
+| `GameSource/` | IL2CPP 导出与 IDA 数据库，本地保留，不提交 |
+| `External/` | Unity-Mod 旧参考仓库、自定义游戏数据，本地保留，不提交 |
+| `Artifacts/bin/<模组名>/<配置>/` | 构建 DLL，不提交 |
+| `Artifacts/packages/` | 原有版本化发布 zip，不提交 |
+| `.cache/` | 迁移校验清单、导出备份和验证日志，不提交 |
+| `GamePaths.props` | 默认游戏路径 |
+| `GamePaths.local.props` | 可选的本机路径覆盖，不提交 |
 
-这不是误放文件，而是当前仓库的有意布局。
+## 构建与部署
 
-## 顶层目录说明
+从仓库根目录执行，构建成功后默认自动部署指定 DLL，并核对 SHA256：
 
-- `GameSource/`
-  - 游戏 API 抽取脚本、逆向参考资料与旧工程留档。
-  - 其中 `Extract-DllApi.ps1` 用于从 `Assembly-CSharp.dll` 生成接口文档。
-- `LongYinAttrReinforceMod/`
-  - 六维属性额外换算生命与内力的 Mod 工程。
-- `LongYinCustomBgm/`
-  - 自定义 BGM Mod 工程。
-  - 当前带有 `PackageRoot`，发布包会同时包含 `Mods` 与 `UserData` 所需内容。
-- `LongYinCustomEvent/`
-  - 世界事件与随机事件外部注入 Mod 工程。
-- `LongYinCustomHeroTags/`
-  - 英雄标签覆盖与扩展 Mod 工程。
-- `LongYinCustomKungfuSkill/`
-  - 功法属性与图标自定义 Mod 工程。
-- `LongYinCustomSpeHeroData/`
-  - 特殊角色数据自定义 Mod 工程。
-- `LongYinFontReplacement/`
-  - 运行时字体替换 Mod 工程。
-- `LongYinGameplayTweaks/`
-  - 玩法调整类 Mod 工程。
-- `LongYinPlayerSpeSkeleton/`
-  - 玩家特殊立绘替换 Mod 工程。
-- `NoGenderLimit/`
-  - 七夕与互动性别限制移除 Mod 工程。
+```powershell
+dotnet build "Mods/ForcePermissionTweaks/ForcePermissionTweaks.csproj" -c Release
+```
 
-## 根目录 DLL 说明
+仅构建、打包，不修改游戏：
 
-根目录下的 `.dll` 供 `MelonLoader` 直接读取。
+```powershell
+dotnet build "Mods/ForcePermissionTweaks/ForcePermissionTweaks.csproj" -c Release -p:DeployMods=false
+```
 
-这类文件包括但不限于：
+统一部署入口（默认 Release，可指定多个名称）：
 
-- 本仓库内项目构建得到的 DLL，例如 `LongYinCustomEvent.dll`
-- 外部来源或历史保留的 DLL，例如 `LYMod.dll`
+```powershell
+pwsh -NoProfile -File "Scripts/Deploy-Mod.ps1" ForcePermissionTweaks
+& ./Scripts/Deploy-Mod.ps1 -ModName @('MailFilter', 'HotkeyRemap')
+pwsh -NoProfile -File "Scripts/Deploy-Mod.ps1" ForcePermissionTweaks -NoBuild
+pwsh -NoProfile -File "Scripts/Deploy-Mod.ps1" ForcePermissionTweaks -NoBuild -WhatIf
+```
 
-不要因为“看起来像构建产物”就把这些 DLL 挪走；对当前仓库来说，它们本身就是运行目录的一部分。
+`-NoBuild` 部署指定配置的已有产物，不检查它是否比源码更新。部署在游戏运行时明确报错，不终止进程。只复制所选模组 DLL，不同步源码、文档、运行依赖或其他 DLL，也不自动启用历史模组。
 
-## 开发约定
+存在 `PackageRoot/UserData` 时，部署脚本仅补充缺失资源，保留已有用户文件。游戏的 `UserData` 继续作为运行配置目录，不随源码迁移。多数工程仍自动打包；`LongYinGameplayTweaks` 保留仅输出 DLL 的行为，BGM 发布包保留 `Mods` 和 `UserData` 结构。
 
-### 1. 目录定位
+游戏位置变化时，在本机新建以下文件：
 
-- 根目录承担运行职责，保持可直接被 `MelonLoader` 加载。
-- 每个 Mod 子目录承担源码与项目文档职责。
-- 与游戏运行相关的 `UserData` 不在本目录下，而是在 `Mods` 同级目录。
+```xml
+<!-- GamePaths.local.props -->
+<Project>
+  <PropertyGroup>
+    <GameRootDir>C:\Path\To\LongYinLiZhiZhuan\</GameRootDir>
+  </PropertyGroup>
+</Project>
+```
 
-### 2. 构建输出
+也可分别给构建传 `-p:GameRootDir=...`，给脚本传 `-GameRootDir ...`。依赖直接引用该游戏下的 `MelonLoader/net6` 和 `MelonLoader/Il2CppAssemblies`。
 
-- 大多数项目会把 DLL 直接输出到仓库根目录，也就是当前 `Mods` 目录。
-- 多数项目在构建后还会自动在各自项目目录生成带版本号的 zip 包。
-- `LongYinGameplayTweaks` 当前只输出 DLL，不参与自动 zip 打包。
-- `LongYinCustomBgm` 的打包规则包含额外 `UserData` 资源，和其他仅 DLL 型项目不同。
+## 开发工具
 
-### 3. README 分工
+```powershell
+pwsh -NoProfile -File "Scripts/Update-GameSource.ps1"
+```
 
-- 各项目目录内的 README 以玩家安装、配置、使用说明为主。
-- 仓库根 README 负责说明整体结构、开发约定和工具入口。
+导出到仓库 `GameSource`。旧 Dump 和 DummyDll 先移入 `.cache/GameSource-backups`，保留原有 IDA 数据库和分析日志。IDA 导入工具位于 `Tools/Import-Il2CppDumpToIda.py`，从仓库 `GameSource` 读取导出文件。两项工具仍使用 `<Il2CppDumper目录>`。
 
-### 4. 临时文件
+## 验证与提交
 
-- `obj/`、`.dotnet/`、`.vscode/`、临时导出物等内容不作为正式发布内容。
-- 是否保留这些目录，以实际开发需要为准，但不应影响玩家阅读项目 README。
-
-## 常用开发入口
-
-### Extract-DllApi
-
-`GameSource/Extract-DllApi.ps1` 用于从游戏 DLL 生成 API 文档。
-
-常见输出包括：
-
-- `api.md`
-- `api.html`
-- `api.json`
-- `api.compact.json`
-
-具体参数和使用方式请查看 [GameSource/README.md](<游戏目录>/Mods/GameSource/README.md)。
-
-### 项目构建
-
-各子项目通常都提供独立的 `.csproj` 和 `.vscode/tasks.json`。
-
-目前仓库内主流规则是：
-
-- 构建目标为 `.NET 6`
-- DLL 输出到当前 `Mods` 根目录
-- 部分项目自动生成版本号 zip
-
-如果需要调整统一规则，优先从各项目 `.csproj` 中的输出路径和 `PackageBuildOutput` 目标入手。
-
-## 维护建议
-
-- 项目 README 面向玩家时，避免写过多开发细节。
-- 仓库级规则优先写在本文件，避免信息分散到每个项目中。
-- 若新增 Mod，建议保持“根目录 DLL + 同名项目目录”的现有结构，减少运行与维护成本。
-
-## 免责声明
-
-- 本仓库仅作个人/社区学习实验使用。
-- 请按游戏与平台许可条款使用 Mod，不建议在违反规则的环境中使用。
+以独立项目构建和游戏内最小回归为准；构建、打包、部署哈希通过不等于游戏内验收。仅暂存明确的相关文件，不提交 DLL、zip、obj、本机配置和导出资料。迁移保留了原 Git 历史、未提交修改及本地文件；原 Mods 下的运行 DLL 未因搬迁替换。
